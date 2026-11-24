@@ -40,8 +40,11 @@ No dependencies. React is optional.
 It is not on npm yet. Install it from GitHub (it builds on install):
 
 ```bash
-pnpm add github:unvalley/ascii-sky
+npm install github:unvalley/ascii-sky
 ```
+
+Recent pnpm installs it too, once you allow its build: pnpm stops and
+prints the `allowBuilds` entry to add to `pnpm-workspace.yaml`.
 
 The sky needs its five files (about 100 KB) served by your site. Copy the
 package's `assets` folder to where your static files live:
