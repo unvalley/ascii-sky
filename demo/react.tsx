@@ -12,7 +12,7 @@ function App() {
       <AsciiSky theme={theme} assets={import.meta.env.BASE_URL} style={{ height: 360 }} />
       <main>
         <h1>ascii-sky in React</h1>
-        {(["light", "dark", "sunset"] as const).map((t) => (
+        {(["light", "dark", "vice"] as const).map((t) => (
           <button key={t} type="button" aria-pressed={t === theme} onClick={() => setTheme(t)}>
             {t}
           </button>

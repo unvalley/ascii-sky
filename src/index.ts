@@ -20,4 +20,4 @@ export {
 export { NIGHT } from "./night.ts";
 export type { Stars } from "./shade.ts";
 export { type StillSkyStyle, stillSky } from "./still.ts";
-export { SUNSET_STOPS, sunsetColours, sunsetGradient } from "./sunset.ts";
+export { VICE_STOPS, viceColours, viceGradient } from "./vice.ts";

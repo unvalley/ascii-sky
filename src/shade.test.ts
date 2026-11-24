@@ -191,8 +191,8 @@ describe("turns", () => {
 });
 
 describe("wind", () => {
-  test("in the sunset colours open sky's glyphs and tiles cyan; by day only its glyphs", () => {
-    const at = (theme: "light" | "sunset") => {
+  test("in the GTA VI sky colours open sky's glyphs and tiles cyan; by day only its glyphs", () => {
+    const at = (theme: "light" | "vice") => {
       const { grid, frame, air } = setup(400, 240);
       const { cells } = fakeCells(0.5);
       air.stirred = true;
@@ -206,10 +206,10 @@ describe("wind", () => {
     };
     const day = at("light");
     assert.deepEqual(day.tile, [220, 220, 220], "the day's tiles stay as they are");
-    const sunset = at("sunset");
-    assert.ok(sunset.tile[0] < day.tile[0] - 20 && sunset.tile[2] > sunset.tile[0] + 25, `a cyan tile: ${sunset.tile}`);
+    const vice = at("vice");
+    assert.ok(vice.tile[0] < day.tile[0] - 20 && vice.tile[2] > vice.tile[0] + 25, `a cyan tile: ${vice.tile}`);
     // The glyph (100, 150, 200 here) goes most of the way to the wind's cyan.
-    assert.ok(sunset.glyph[0] < 30 && sunset.glyph[1] > 175, `a cyan glyph: ${sunset.glyph}`);
+    assert.ok(vice.glyph[0] < 30 && vice.glyph[1] > 175, `a cyan glyph: ${vice.glyph}`);
   });
 });
 

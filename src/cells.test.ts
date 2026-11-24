@@ -41,7 +41,7 @@ function sky(near: CloudLayer, far = layer(0)) {
       cw: 6,
       ch: 10,
       text: Array.from({ length: rows }, () => SKY_RAMP[4].repeat(columns)).join("\n"),
-      rgb: { light: rgb, dark: rgb, sunset: rgb },
+      rgb: { light: rgb, dark: rgb, vice: rgb },
     },
     near,
     far,
@@ -82,16 +82,16 @@ describe("night", () => {
   });
 });
 
-describe("sunset", () => {
-  test("a sunset has only the near layer's clouds", () => {
+describe("vice", () => {
+  test("a Vice City sunset has only the near layer's clouds", () => {
     const out = [0, 0, 0, 0, 0, 0, 0, 0];
     const farOnly = sky(layer(0), layer(255, 0));
     farOnly.at(0);
-    assert.equal(farOnly.cell(40, 40, 8, 12, "sunset", out), OPEN_SKY);
+    assert.equal(farOnly.cell(40, 40, 8, 12, "vice", out), OPEN_SKY);
     assert.notEqual(farOnly.cell(40, 40, 8, 12, "light", out), OPEN_SKY);
     const near = sky(layer(255, 0));
     near.at(0);
-    assert.notEqual(near.cell(40, 40, 8, 12, "sunset", out), OPEN_SKY);
+    assert.notEqual(near.cell(40, 40, 8, 12, "vice", out), OPEN_SKY);
   });
 });
 

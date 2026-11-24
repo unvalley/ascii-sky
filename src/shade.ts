@@ -17,8 +17,8 @@ import { sine } from "./wave.ts";
 export type Theme = SkyTheme;
 
 /** What the wind is drawn in: a deeper blue on the light page, near white
- * on the dark, and the sea's cyan in a sunset. */
-const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], sunset: [0, 190, 230] } as const;
+ * on the dark, and the sea's cyan in a Vice City sunset. */
+const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], vice: [0, 190, 230] } as const;
 /** How strongly the wind colours what it passes: open sky's glyphs (1 is
  * by how much the air glows) and their tiles (0 leaves them). The
  * sunset's glyphs are dense and bright, so its wind colours them sooner
@@ -26,7 +26,7 @@ const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], sunset: [0, 190, 230
 const WIND_TINT = {
   light: { glyph: 1, tile: 0 },
   dark: { glyph: 1, tile: 0 },
-  sunset: { glyph: 2.2, tile: 0.4 },
+  vice: { glyph: 2.2, tile: 0.4 },
 } as const;
 /** Air that glows this much and moves this fast (page pixels a second)
  * shows as a streak along the wind over open sky. */

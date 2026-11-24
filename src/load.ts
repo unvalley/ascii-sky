@@ -7,7 +7,7 @@ import { sky } from "./art.ts";
 import { measureShapes } from "./atlas.ts";
 import { type SkyCells, skyCells } from "./cells.ts";
 import { DEFAULT_ASSETS, type SkyAssets, skyUrl } from "./files.ts";
-import { sunsetColours } from "./sunset.ts";
+import { viceColours } from "./vice.ts";
 
 async function pixelsOf(url: string, signal?: AbortSignal) {
   const response = await fetch(url, { signal });
@@ -60,7 +60,7 @@ export async function loadSky(
       rgb: {
         light: light.pixels,
         dark: dark.pixels,
-        sunset: sunsetColours(sky.columns, sky.rows, sky.cellHeight, text),
+        vice: viceColours(sky.columns, sky.rows, sky.cellHeight, text),
       },
     },
     near,

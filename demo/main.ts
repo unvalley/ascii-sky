@@ -13,14 +13,15 @@ const dark = window.matchMedia("(prefers-color-scheme: dark)");
 const resolve = (choice: ThemeChoice): SkyTheme =>
   choice === "auto" ? (dark.matches ? "dark" : "light") : choice;
 
+const CHOICES: readonly string[] = ["auto", "light", "dark", "vice"];
 const saved = (() => {
   try {
-    return localStorage.getItem("ascii-sky-theme") as ThemeChoice | null;
+    return localStorage.getItem("ascii-sky-theme");
   } catch {
     return null;
   }
 })();
-let choice: ThemeChoice = saved ?? "auto";
+let choice = (saved && CHOICES.includes(saved) ? saved : "auto") as ThemeChoice;
 
 box.style.height = `${SKY_HEIGHT}px`;
 const sky = mountSky(canvas, { assets, theme: choice });

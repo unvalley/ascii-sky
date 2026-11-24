@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { SKY_HEIGHT, SKY_WIDTH } from "./mount.ts";
 import { stillSky } from "./still.ts";
-import { sunsetGradient } from "./sunset.ts";
+import { viceGradient } from "./vice.ts";
 
 describe("stillSky", () => {
   test("stretches the colour map over the cells, centred and repeating sideways", () => {
@@ -13,8 +13,8 @@ describe("stillSky", () => {
     assert.ok(opacity > 0 && opacity < 1);
   });
 
-  test("the night has its own map, the sunset its gradient", () => {
+  test("the night has its own map, the vice theme its gradient", () => {
     assert.match(stillSky("dark").background, /sky-dark\.webp/);
-    assert.equal(stillSky("sunset").background, sunsetGradient());
+    assert.equal(stillSky("vice").background, viceGradient());
   });
 });

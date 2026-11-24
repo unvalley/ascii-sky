@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { SKY_RAMP } from "./cells.ts";
 import { oklab } from "./oklab.ts";
-import { SUNSET_STOPS, sunsetColours, sunsetGradient } from "./sunset.ts";
+import { VICE_STOPS, viceColours, viceGradient } from "./vice.ts";
 
 const COLUMNS = 3;
 const ROWS = 60;
@@ -12,7 +12,7 @@ const text = Array.from(
   { length: ROWS },
   () => `${SKY_RAMP[0]}${SKY_RAMP[4]}${SKY_RAMP[SKY_RAMP.length - 1]}`,
 ).join("\n");
-const colours = sunsetColours(COLUMNS, ROWS, CH, text);
+const colours = viceColours(COLUMNS, ROWS, CH, text);
 const at = (c: number, r: number) => {
   const o = (r * COLUMNS + c) * 4;
   return [colours[o], colours[o + 1], colours[o + 2], colours[o + 3]];
@@ -23,7 +23,7 @@ const hue = ([r, g, b]: number[]) => {
   return ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360;
 };
 
-describe("sunset", () => {
+describe("vice", () => {
   test("a colour a cell, opaque", () => {
     assert.equal(colours.length, COLUMNS * ROWS * 4);
     for (let r = 0; r < ROWS; r++) assert.equal(at(1, r)[3], 255);
@@ -46,7 +46,7 @@ describe("sunset", () => {
   });
 
   test("the page's gradient has the same stops", () => {
-    const css = sunsetGradient();
-    for (const [y, c] of SUNSET_STOPS) assert.ok(css.includes(`${c} ${y}px`), css);
+    const css = viceGradient();
+    for (const [y, c] of VICE_STOPS) assert.ok(css.includes(`${c} ${y}px`), css);
   });
 });

@@ -102,8 +102,8 @@ export type CloudLayer = {
 
 type Rgb = readonly [number, number, number];
 /** The sky's themes: by day on the light page, a night on the dark one,
- * and a sunset (sunset.ts). */
-export type SkyTheme = "light" | "dark" | "sunset";
+ * and a Vice City sunset (vice.ts). */
+export type SkyTheme = "light" | "dark" | "vice";
 /**
  * How a theme draws clouds: a cloud is a block of tiles, each cell
  * filled and shaded by the light, with a glyph on it
@@ -171,11 +171,11 @@ export const THEMES: Record<SkyTheme, Theme> = {
     clouds: false,
     far: false,
   },
-  // A sunset (sunset.ts): a few big clouds low in the sky, lit
+  // A Vice City sunset (vice.ts): a few big clouds low in the sky, lit
   // peach by the low sun, pink into their shade and violet deep in it,
   // and none of the far layer's small high ones, so the sky above is
   // clear, nor the near layer's small ones.
-  sunset: {
+  vice: {
     inside: " .:;o8%@",
     tile: palette("#ffeedd", "#ffd8c8", "#f9bfd2", "#e3a6d6"),
     glyph: palette("#ff9a68", "#f87a96", "#d064b0", "#985cc4"),
@@ -643,7 +643,7 @@ export function skyCells(o: {
   const shading = {
     light: [...THEMES.light.inside].map((g) => GLYPHS.indexOf(g)),
     dark: [...THEMES.dark.inside].map((g) => GLYPHS.indexOf(g)),
-    sunset: [...THEMES.sunset.inside].map((g) => GLYPHS.indexOf(g)),
+    vice: [...THEMES.vice.inside].map((g) => GLYPHS.indexOf(g)),
   };
   const want = new Float32Array(6);
   const tile = [0, 0, 0];
