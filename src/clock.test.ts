@@ -23,7 +23,9 @@ function drawnIn(hz: number, rate: number, seconds = 1) {
   let drawn = 0;
   for (let i = 1; i <= hz * seconds; i++) {
     const due = beat(drawnAt, rate, (i * 1000) / hz);
-    if (Number.isNaN(due)) continue;
+    if (Number.isNaN(due)) {
+      continue;
+    }
     drawnAt = due;
     drawn++;
   }
@@ -32,7 +34,7 @@ function drawnIn(hz: number, rate: number, seconds = 1) {
 
 describe("beat", () => {
   test("draws the first frame whenever it comes", () => {
-    assert.equal(beat(Number.NEGATIVE_INFINITY, FULL_RATE, 12345.6), 12345.6);
+    assert.equal(beat(Number.NEGATIVE_INFINITY, FULL_RATE, 12_345.6), 12_345.6);
   });
 
   test("draws every frame of a 60 Hz screen", () => {

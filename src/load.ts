@@ -6,7 +6,9 @@ import { viceColours } from "./vice.ts";
 
 async function pixelsOf(url: string, signal?: AbortSignal) {
   const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(`ascii-sky: ${url} answered ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`ascii-sky: ${url} answered ${response.status}`);
+  }
   const bitmap = await createImageBitmap(await response.blob(), {
     colorSpaceConversion: "none",
     premultiplyAlpha: "none",
@@ -16,7 +18,9 @@ async function pixelsOf(url: string, signal?: AbortSignal) {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("ascii-sky: no 2d context");
+  if (!ctx) {
+    throw new Error("ascii-sky: no 2d context");
+  }
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
   return { pixels: ctx.getImageData(0, 0, width, height).data, width, height };
@@ -24,7 +28,9 @@ async function pixelsOf(url: string, signal?: AbortSignal) {
 
 async function textOf(url: string, signal?: AbortSignal) {
   const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(`ascii-sky: ${url} answered ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`ascii-sky: ${url} answered ${response.status}`);
+  }
   return response.text();
 }
 
@@ -40,7 +46,9 @@ export async function loadSky(
     pixelsOf(skyUrl(assets, "far"), signal),
   ]);
   const shapes = measureShapes(sky.cellWidth, sky.cellHeight);
-  if (!shapes) throw new Error("ascii-sky: no 2d context");
+  if (!shapes) {
+    throw new Error("ascii-sky: no 2d context");
+  }
   return skyCells({
     still: {
       columns: sky.columns,

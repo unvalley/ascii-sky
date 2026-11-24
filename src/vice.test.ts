@@ -9,7 +9,7 @@ const ROWS = 60;
 const CH = 10;
 const text = Array.from(
   { length: ROWS },
-  () => `${SKY_RAMP[0]}${SKY_RAMP[4]}${SKY_RAMP[SKY_RAMP.length - 1]}`,
+  () => `${SKY_RAMP[0]}${SKY_RAMP[4]}${SKY_RAMP.at(-1)}`,
 ).join("\n");
 const colours = viceColours(COLUMNS, ROWS, CH, text);
 const at = (c: number, r: number) => {
@@ -24,7 +24,9 @@ const hue = ([r, g, b]: number[]) => {
 describe("vice", () => {
   test("a colour a cell, opaque", () => {
     assert.equal(colours.length, COLUMNS * ROWS * 4);
-    for (let r = 0; r < ROWS; r++) assert.equal(at(1, r)[3], 255);
+    for (let r = 0; r < ROWS; r++) {
+      assert.equal(at(1, r)[3], 255);
+    }
   });
 
   test("runs from violet at the top to orange low down", () => {
@@ -38,13 +40,17 @@ describe("vice", () => {
 
   test("is deeper where the painting's blue is denser", () => {
     for (const r of [0, 20, 40]) {
-      const [light, middle, dense] = [0, 1, 2].map((c) => oklab(...(at(c, r).slice(0, 3) as [number, number, number]))[0]);
+      const [light, middle, dense] = [0, 1, 2].map(
+        (c) => oklab(...(at(c, r).slice(0, 3) as [number, number, number]))[0],
+      );
       assert.ok(light > middle && middle > dense, `row ${r}: ${light} ${middle} ${dense}`);
     }
   });
 
   test("the page's gradient has the same stops", () => {
     const css = viceGradient();
-    for (const [y, c] of VICE_STOPS) assert.ok(css.includes(`${c} ${y}px`), css);
+    for (const [y, c] of VICE_STOPS) {
+      assert.ok(css.includes(`${c} ${y}px`), css);
+    }
   });
 });

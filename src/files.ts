@@ -15,7 +15,9 @@ export type SkyAssets = string | Readonly<Record<SkyFile, string>>;
 export const DEFAULT_ASSETS = "/ascii-sky/";
 
 export function skyUrl(assets: SkyAssets, file: SkyFile): string {
-  if (typeof assets !== "string") return assets[file];
+  if (typeof assets !== "string") {
+    return assets[file];
+  }
   const base = assets.endsWith("/") ? assets : `${assets}/`;
   return `${base}${SKY_FILES[file]}?v=${sky.version}`;
 }

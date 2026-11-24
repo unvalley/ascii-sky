@@ -18,7 +18,9 @@ export type Layers = Readonly<{
 
 const layer = (canvas: HTMLCanvasElement) => {
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("no 2d context");
+  if (!ctx) {
+    throw new Error("no 2d context");
+  }
   return ctx;
 };
 
@@ -48,15 +50,20 @@ export function sizeLayers(layers: Layers, grid: Grid) {
     c.width = pw;
     c.height = ph;
   }
-  tint.width = tiles.width = cols;
-  tint.height = tiles.height = rows;
+  tint.width = cols;
+  tiles.width = cols;
+  tint.height = rows;
+  tiles.height = rows;
   ctx.imageSmoothingEnabled = false;
   inkCtx.imageSmoothingEnabled = false;
   const line = Math.max(1, Math.round(dpr));
   gapsCtx.fillStyle = "#000";
-  for (let c = 0; c <= cols; c++)
+  for (let c = 0; c <= cols; c++) {
     gapsCtx.fillRect(Math.round((originX + c * cw) * dpr), 0, line, ph);
-  for (let r = 0; r <= rows; r++) gapsCtx.fillRect(0, Math.round(r * ch * dpr), pw, line);
+  }
+  for (let r = 0; r <= rows; r++) {
+    gapsCtx.fillRect(0, Math.round(r * ch * dpr), pw, line);
+  }
   return {
     colours: tintCtx.createImageData(cols, rows),
     tiles: tilesCtx.createImageData(cols, rows),
@@ -84,7 +91,9 @@ export function stamp(
     const h = down[r];
     maskCtx.clearRect(x, y, w, h);
     const code = shown[k];
-    if (code >= 0) maskCtx.drawImage(glyphs, code * gw, 0, w, h, x, y, w, h);
+    if (code >= 0) {
+      maskCtx.drawImage(glyphs, code * gw, 0, w, h, x, y, w, h);
+    }
   }
 }
 

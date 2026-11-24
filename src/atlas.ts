@@ -51,7 +51,9 @@ export function drawAtlas(cw: number, ch: number, scale: number): Atlas {
   canvas.width = gw * GLYPHS.length;
   canvas.height = gh;
   const a = canvas.getContext("2d", { willReadFrequently: true });
-  if (!a) return { canvas, gw, gh, ctx: null };
+  if (!a) {
+    return { canvas, gw, gh, ctx: null };
+  }
   a.fillStyle = "#fff";
   a.textBaseline = "alphabetic";
   const fit = fitGlyphs(measureInk(a), cw, ch);
@@ -72,13 +74,17 @@ export function drawAtlas(cw: number, ch: number, scale: number): Atlas {
 
 export function measureShapes(cw: number, ch: number): Float32Array | null {
   const big = drawAtlas(cw, ch, MEASURE);
-  if (!big.ctx) return null;
+  if (!big.ctx) {
+    return null;
+  }
   const ink = big.ctx.getImageData(0, 0, big.canvas.width, big.gh).data;
   const measured = GLYPHS.map((_, g) => {
     const one = new Uint8ClampedArray(big.gw * big.gh);
-    for (let y = 0; y < big.gh; y++)
-      for (let x = 0; x < big.gw; x++)
+    for (let y = 0; y < big.gh; y++) {
+      for (let x = 0; x < big.gw; x++) {
         one[y * big.gw + x] = ink[(y * big.canvas.width + g * big.gw + x) * 4 + 3];
+      }
+    }
     return measureGlyph(one, big.gw, big.gh, 1, 0);
   });
   return normaliseShapes(measured);

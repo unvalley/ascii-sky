@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+
 const require = createRequire(import.meta.url);
 const sharp = require("sharp");
 const [input, outDir, sheet] = process.argv.slice(2);
@@ -14,7 +15,10 @@ const smooth = (a, b, t) => {
   return x * x * (3 - 2 * x);
 };
 
-const { data: img, info } = await sharp(input).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+const { data: img, info } = await sharp(input)
+  .removeAlpha()
+  .raw()
+  .toBuffer({ resolveWithObject: true });
 const IW = info.width;
 const IH = info.height;
 const alpha = new Float32Array(IW * IH);
@@ -33,9 +37,9 @@ function wave(t, seed, step = 38) {
   const u = t / step;
   const i = Math.floor(u);
   const r = (k) => {
-    let h = Math.imul(k + seed * 7919, 2654435761) >>> 0;
-    h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
-    return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+    let h = Math.imul(k + seed * 7919, 2_654_435_761) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 2_246_822_519) >>> 0;
+    return ((h ^ (h >>> 13)) >>> 0) / 4_294_967_296;
   };
   const f = u - i;
   return r(i) + (r(i + 1) - r(i)) * f * f * (3 - 2 * f);
@@ -48,14 +52,22 @@ function sprite(name, [x0, y0, x1, y1], fade = [0, 0, 0, 0], flip = false) {
   const s = new Float32Array(w * h);
   const seed = x0 * 31 + y0;
   const reach = (side, t) => fade[side] * (0.35 + 1.3 * wave(t, seed + side));
-  for (let y = 0; y < h; y++)
+  for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = (y0 + y) * IW + x0 + x;
       let f = 1;
-      if (fade[0]) f *= smooth(0, reach(0, y), x);
-      if (fade[1]) f *= smooth(0, reach(1, x), y);
-      if (fade[2]) f *= smooth(0, reach(2, y), w - 1 - x);
-      if (fade[3]) f *= smooth(0, reach(3, x), h - 1 - y);
+      if (fade[0]) {
+        f *= smooth(0, reach(0, y), x);
+      }
+      if (fade[1]) {
+        f *= smooth(0, reach(1, x), y);
+      }
+      if (fade[2]) {
+        f *= smooth(0, reach(2, y), w - 1 - x);
+      }
+      if (fade[3]) {
+        f *= smooth(0, reach(3, x), h - 1 - y);
+      }
       const ex = (x - w / 2) / (w * 0.62);
       const ey = (y - h / 2) / (h * 0.62);
       f *= 1 - smooth(0.82, 1, Math.hypot(ex, ey));
@@ -63,59 +75,82 @@ function sprite(name, [x0, y0, x1, y1], fade = [0, 0, 0, 0], flip = false) {
       a[k] = alpha[i] * f;
       s[k] = shade[i];
     }
-  const SIMPLE_R = env("SIMPLE_R", 10);
-  if (SIMPLE_R > 0) {
-    const soft = boxBlur(boxBlur(a, w, h, SIMPLE_R), w, h, Math.round(SIMPLE_R / 2));
-    for (let k = 0; k < w * h; k++) a[k] = Math.max(a[k] * env("WISP", 0.7), smooth(env("SIMPLE_LO", 0.28), env("SIMPLE_HI", 0.55), soft[k]));
+  }
+  const simpleR = env("SIMPLE_R", 10);
+  if (simpleR > 0) {
+    const soft = boxBlur(boxBlur(a, w, h, simpleR), w, h, Math.round(simpleR / 2));
+    for (let k = 0; k < w * h; k++) {
+      a[k] = Math.max(
+        a[k] * env("WISP", 0.7),
+        smooth(env("SIMPLE_LO", 0.28), env("SIMPLE_HI", 0.55), soft[k]),
+      );
+    }
   }
   const blur = boxBlur(s, w, h, env("DETAIL_R", 5));
   const detail = new Float32Array(w * h);
-  for (let k = 0; k < w * h; k++) detail[k] = Math.min(1, Math.max(0, blur[k] + env("DETAIL", 1.8) * (s[k] - blur[k])));
+  for (let k = 0; k < w * h; k++) {
+    detail[k] = Math.min(1, Math.max(0, blur[k] + env("DETAIL", 1.8) * (s[k] - blur[k])));
+  }
   const ranked = [];
-  for (let k = 0; k < w * h; k++) if (a[k] > 0.4) ranked.push(detail[k]);
+  for (let k = 0; k < w * h; k++) {
+    if (a[k] > 0.4) {
+      ranked.push(detail[k]);
+    }
+  }
   ranked.sort((p, q) => p - q);
   const rank = (v) => {
     let lo = 0;
     let hi = ranked.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (ranked[mid] < v) lo = mid + 1;
-      else hi = mid;
+      if (ranked[mid] < v) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
     }
-    return ranked.length ? lo / ranked.length : 0;
+    return ranked.length > 0 ? lo / ranked.length : 0;
   };
   const mixRank = env("RANK", 0.7);
-  for (let k = 0; k < w * h; k++) s[k] = detail[k] * (1 - mixRank) + rank(detail[k]) * mixRank;
+  for (let k = 0; k < w * h; k++) {
+    s[k] = detail[k] * (1 - mixRank) + rank(detail[k]) * mixRank;
+  }
   return { name, w, h, a, s };
 }
 
 function boxBlur(src, w, h, r) {
   const tmp = new Float32Array(w * h);
   const out = new Float32Array(w * h);
-  for (let y = 0; y < h; y++)
+  for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let sum = 0;
       let n = 0;
       for (let d = -r; d <= r; d++) {
         const xx = x + d;
-        if (xx < 0 || xx >= w) continue;
+        if (xx < 0 || xx >= w) {
+          continue;
+        }
         sum += src[y * w + xx];
         n++;
       }
       tmp[y * w + x] = sum / n;
     }
-  for (let y = 0; y < h; y++)
+  }
+  for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let sum = 0;
       let n = 0;
       for (let d = -r; d <= r; d++) {
         const yy = y + d;
-        if (yy < 0 || yy >= h) continue;
+        if (yy < 0 || yy >= h) {
+          continue;
+        }
         sum += tmp[yy * w + x];
         n++;
       }
       out[y * w + x] = sum / n;
     }
+  }
   return out;
 }
 
@@ -148,14 +183,24 @@ if (sheet) {
     for (let k = 0; k < sp.w * sp.h; k++) {
       const cloud = [255 - sp.s[k] * 140, 255 - sp.s[k] * 115, 255 - sp.s[k] * 70];
       const sky = [64, 150, 230];
-      for (let c = 0; c < 3; c++) buf[k * 3 + c] = Math.round(sky[c] * (1 - sp.a[k]) + cloud[c] * sp.a[k]);
+      for (let c = 0; c < 3; c++) {
+        buf[k * 3 + c] = Math.round(sky[c] * (1 - sp.a[k]) + cloud[c] * sp.a[k]);
+      }
     }
     const scale = Math.min(1, (COL - 10) / sp.w);
     const w = Math.round(sp.w * scale);
     const h = Math.round(sp.h * scale);
-    const img = await sharp(buf, { raw: { width: sp.w, height: sp.h, channels: 3 } }).resize(w, h).png().toBuffer();
-    const label = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="18"><text x="2" y="14" font-family="Menlo" font-size="13">${sp.name} ${sp.w}x${sp.h}</text></svg>`);
-    parts.push({ input: img, top: top + 18, left: col * COL }, { input: label, top, left: col * COL });
+    const cutout = await sharp(buf, { raw: { width: sp.w, height: sp.h, channels: 3 } })
+      .resize(w, h)
+      .png()
+      .toBuffer();
+    const label = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="18"><text x="2" y="14" font-family="Menlo" font-size="13">${sp.name} ${sp.w}x${sp.h}</text></svg>`,
+    );
+    parts.push(
+      { input: cutout, top: top + 18, left: col * COL },
+      { input: label, top, left: col * COL },
+    );
     rowH = Math.max(rowH, h + 26);
     if (++col === 2) {
       col = 0;
@@ -164,7 +209,10 @@ if (sheet) {
     }
   }
   top += rowH;
-  await sharp({ create: { width: COL * 2, height: top, channels: 3, background: "#fff" } }).composite(parts).png().toFile(path.join(outDir, "sprites.png"));
+  await sharp({ create: { width: COL * 2, height: top, channels: 3, background: "#fff" } })
+    .composite(parts)
+    .png()
+    .toFile(path.join(outDir, "sprites.png"));
   console.log("sheet", top);
   process.exit(0);
 }
@@ -174,7 +222,7 @@ function place(layer, sp, x, base, scale, { wide = 1, flip = false } = {}) {
   const h = Math.round(sp.h * scale);
   const left = Math.round(x - w / 2);
   const top = Math.round(base - h);
-  for (let y = 0; y < h; y++)
+  for (let y = 0; y < h; y++) {
     for (let xx = 0; xx < w; xx++) {
       const sx0 = (xx / w) * sp.w;
       const sx1 = ((xx + 1) / w) * sp.w;
@@ -183,17 +231,20 @@ function place(layer, sp, x, base, scale, { wide = 1, flip = false } = {}) {
       let a = 0;
       let as = 0;
       let n = 0;
-      for (let sy = Math.floor(sy0); sy < Math.ceil(sy1); sy++)
+      for (let sy = Math.floor(sy0); sy < Math.ceil(sy1); sy++) {
         for (let sx = Math.floor(sx0); sx < Math.ceil(sx1); sx++) {
           const k = sy * sp.w + (flip ? sp.w - 1 - sx : sx);
           a += sp.a[k];
           as += sp.a[k] * sp.s[k];
           n++;
         }
+      }
       a /= n;
       const s = a > 0 ? as / n / a : 0;
       const py = top + y;
-      if (py < 0 || py >= H || a <= 0) continue;
+      if (py < 0 || py >= H || a <= 0) {
+        continue;
+      }
       const px = (((left + xx) % PERIOD) + PERIOD) % PERIOD;
       const k = py * PERIOD + px;
       const under = layer.a[k];
@@ -201,6 +252,7 @@ function place(layer, sp, x, base, scale, { wide = 1, flip = false } = {}) {
       layer.s[k] = total > 0 ? (s * a + layer.s[k] * under * (1 - a)) / total : 0;
       layer.a[k] = total;
     }
+  }
 }
 
 const layers = {
@@ -234,11 +286,16 @@ const LH = H / 2;
 for (const [name, layer] of Object.entries(layers)) {
   const out = Buffer.alloc(LW * LH * 3);
   const half = new Float32Array(LW * LH);
-  for (let j = 0; j < LH; j++)
+  for (let j = 0; j < LH; j++) {
     for (let i = 0; i < LW; i++) {
       let a = 0;
       let as = 0;
-      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      for (const [dx, dy] of [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ]) {
         const k = (j * 2 + dy) * PERIOD + i * 2 + dx;
         a += layer.a[k];
         as += layer.a[k] * layer.s[k];
@@ -252,15 +309,22 @@ for (const [name, layer] of Object.entries(layers)) {
       out[o] = ac > 0 ? q(s) : 0;
       out[o + 1] = q(ac);
     }
-  await sharp(out, { raw: { width: LW, height: LH, channels: 3 } }).png().toFile(path.join(outDir, `clouds-${name}.png`));
+  }
+  await sharp(out, { raw: { width: LW, height: LH, channels: 3 } })
+    .png()
+    .toFile(path.join(outDir, `clouds-${name}.png`));
   const view = Buffer.alloc(LW * LH * 3);
   for (let k = 0; k < LW * LH; k++) {
     const a = out[k * 3 + 1] / 255;
     const s = out[k * 3] / 255;
     const cloud = [255 - s * 140, 255 - s * 115, 255 - s * 70];
     const sky = [64, 150, 230];
-    for (let c = 0; c < 3; c++) view[k * 3 + c] = Math.round(sky[c] * (1 - a) + cloud[c] * a);
+    for (let c = 0; c < 3; c++) {
+      view[k * 3 + c] = Math.round(sky[c] * (1 - a) + cloud[c] * a);
+    }
   }
-  await sharp(view, { raw: { width: LW, height: LH, channels: 3 } }).png().toFile(path.join(outDir, `clouds-${name}-view.png`));
+  await sharp(view, { raw: { width: LW, height: LH, channels: 3 } })
+    .png()
+    .toFile(path.join(outDir, `clouds-${name}-view.png`));
 }
 console.log("layers written");

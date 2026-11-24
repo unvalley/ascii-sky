@@ -16,6 +16,19 @@ export const REGIONS = [
   [0.73, 0.8],
 ] as const;
 export const REGION_RADIUS = 0.24;
+const REACH = 6;
+const KEEP_SHADE = 0.8;
+const KEEP_SHAPE = 0.1;
+
+const toByte = (x: number) => {
+  if (x < 0) {
+    return 0;
+  }
+  if (x > 255) {
+    return 255;
+  }
+  return x | 0;
+};
 
 export function measureGlyph(
   alpha: ArrayLike<number>,
@@ -31,14 +44,17 @@ export function measureGlyph(
     const cy = REGIONS[k][1] * h;
     let sum = 0;
     let n = 0;
-    for (let y = Math.floor(cy - radius); y <= Math.ceil(cy + radius); y++)
+    for (let y = Math.floor(cy - radius); y <= Math.ceil(cy + radius); y++) {
       for (let x = Math.floor(cx - radius); x <= Math.ceil(cx + radius); x++) {
-        if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > radius * radius)
+        if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > radius * radius) {
           continue;
+        }
         n++;
-        if (x >= 0 && y >= 0 && x < w && y < h)
+        if (x >= 0 && y >= 0 && x < w && y < h) {
           sum += alpha[(y * w + x) * stride + offset] / 255;
+        }
       }
+    }
     out[k] = n ? sum / n : 0;
   }
   return out;
@@ -47,11 +63,15 @@ export function measureGlyph(
 export function normaliseShapes(measured: Float32Array[]) {
   const shapes = new Float32Array(GLYPHS.length * 6);
   const most = new Float32Array(6);
-  for (const m of measured)
-    for (let k = 0; k < 6; k++) most[k] = Math.max(most[k], m[k]);
+  for (const m of measured) {
+    for (let k = 0; k < 6; k++) {
+      most[k] = Math.max(most[k], m[k]);
+    }
+  }
   measured.forEach((m, g) => {
-    for (let k = 0; k < 6; k++)
+    for (let k = 0; k < 6; k++) {
       shapes[g * 6 + k] = most[k] ? m[k] / most[k] : 0;
+    }
   });
   return shapes;
 }
@@ -122,12 +142,16 @@ export const THEMES: Record<SkyTheme, Theme> = {
 export function bigClouds(layer: CloudLayer, smallest: number): CloudLayer {
   const { pixels, width: w, height: h } = layer;
   const out = new Uint8ClampedArray(pixels);
-  if (smallest <= 0) return { pixels: out, width: w, height: h };
+  if (smallest <= 0) {
+    return { pixels: out, width: w, height: h };
+  }
   const least = smallest / 4;
   const seen = new Uint8Array(w * h);
   const cloud = new Int32Array(w * h);
   for (let start = 0; start < w * h; start++) {
-    if (seen[start] || pixels[start * 4 + 1] === 0) continue;
+    if (seen[start] || pixels[start * 4 + 1] === 0) {
+      continue;
+    }
     let size = 0;
     let todo = 0;
     cloud[todo++] = start;
@@ -142,17 +166,19 @@ export function bigClouds(layer: CloudLayer, smallest: number): CloudLayer {
         y > 0 ? i - w : -1,
         y + 1 < h ? i + w : -1,
       ];
-      for (const j of next)
+      for (const j of next) {
         if (j >= 0 && !seen[j] && pixels[j * 4 + 1] > 0) {
           seen[j] = 1;
           cloud[todo++] = j;
         }
+      }
     }
-    if (size < least)
+    if (size < least) {
       for (let k = 0; k < size; k++) {
         out[cloud[k] * 4] = 0;
         out[cloud[k] * 4 + 1] = 0;
       }
+    }
   }
   return { pixels: out, width: w, height: h };
 }
@@ -168,8 +194,7 @@ export function drift(seconds: number, mean: number, lag = 0) {
   let d = seconds;
   for (const [share, period, phase] of GUSTS) {
     const w = (2 * Math.PI) / period;
-    d +=
-      (share / w) * (Math.sin(w * (seconds - lag) + phase) - Math.sin(phase));
+    d += (share / w) * (Math.sin(w * (seconds - lag) + phase) - Math.sin(phase));
   }
   return d * mean;
 }
@@ -186,11 +211,11 @@ function makeNoise() {
   const lattice = NOISE_SIZE / NOISE_CELL;
   let seed = 7;
   const rand = () => {
-    seed = (seed + 0x6d2b79f5) >>> 0;
+    seed = (seed + 0x6d_2b_79_f5) >>> 0;
     let t = seed;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
   const out = new Float32Array(NOISE_SIZE * NOISE_SIZE * 4);
   const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
@@ -202,7 +227,9 @@ function makeNoise() {
     [lattice * 2, 0.5],
   ]) {
     const values = new Float64Array(n * n * 4);
-    for (let i = 0; i < values.length; i++) values[i] = rand() * 2 - 1;
+    for (let i = 0; i < values.length; i++) {
+      values[i] = rand() * 2 - 1;
+    }
     const step = NOISE_SIZE / n;
     for (let x = 0; x < NOISE_SIZE; x++) {
       const g = x / step;
@@ -226,15 +253,18 @@ function makeNoise() {
           const b = values[ib + k];
           const c = values[ic + k];
           const d = values[id + k];
-          out[o + k] +=
-            weight * (a + (b - a) * u + (c - a + (d - c - b + a) * u) * v);
+          out[o + k] += weight * (a + (b - a) * u + (c - a + (d - c - b + a) * u) * v);
         }
       }
     }
   }
   let most = 0;
-  for (const v of out) most = Math.max(most, Math.abs(v));
-  for (let i = 0; i < out.length; i++) out[i] /= most;
+  for (const v of out) {
+    most = Math.max(most, Math.abs(v));
+  }
+  for (let i = 0; i < out.length; i++) {
+    out[i] /= most;
+  }
   return out;
 }
 
@@ -254,21 +284,25 @@ function slideMost(
     fore[b] = m;
     for (let p = b + 1; p < e; p++) {
       const v = line[p];
-      if (v > m) m = v;
+      if (v > m) {
+        m = v;
+      }
       fore[p] = m;
     }
     m = line[e - 1];
     back[e - 1] = m;
     for (let p = e - 2; p >= b; p--) {
       const v = line[p];
-      if (v > m) m = v;
+      if (v > m) {
+        m = v;
+      }
       back[p] = m;
     }
   }
   for (let k = 0, length = n - 2 * r; k < length; k++) {
     const a = back[k];
     const c = fore[k + w - 1];
-    most[at + k] = a > c ? a : c;
+    most[at + k] = Math.max(a, c);
   }
 }
 
@@ -296,7 +330,9 @@ function reachBand(
       const row = j * lw;
       for (let p = 0; p < n; p++) {
         let k = x0 + p - rx;
-        if (k < 0 || k >= lw) k = ((k % lw) + lw) % lw;
+        if (k < 0 || k >= lw) {
+          k = ((k % lw) + lw) % lw;
+        }
         line[p] = pixels[(row + k) * 4 + 1];
       }
       slideMost(line, n, rx, fore, back, across, j * bw);
@@ -312,37 +348,48 @@ function reachBand(
       const j = p - ry;
       const to = p * bw;
       if (j < 0 || j >= lh) {
-        if (p === b) fore.fill(0, to, to + bw);
-        else fore.copyWithin(to, to - bw, to);
-      } else if (p === b) fore.set(across.subarray(j * bw, j * bw + bw), to);
-      else
+        if (p === b) {
+          fore.fill(0, to, to + bw);
+        } else {
+          fore.copyWithin(to, to - bw, to);
+        }
+      } else if (p === b) {
+        fore.set(across.subarray(j * bw, j * bw + bw), to);
+      } else {
         for (let i = 0, from = j * bw, last = to - bw; i < bw; i++) {
           const v = across[from + i];
           const m = fore[last + i];
-          fore[to + i] = v > m ? v : m;
+          fore[to + i] = Math.max(v, m);
         }
+      }
     }
     for (let p = e - 1; p >= b; p--) {
       const j = p - ry;
       const to = p * bw;
       if (j < 0 || j >= lh) {
-        if (p === e - 1) back.fill(0, to, to + bw);
-        else back.copyWithin(to, to + bw, to + 2 * bw);
-      } else if (p === e - 1) back.set(across.subarray(j * bw, j * bw + bw), to);
-      else
+        if (p === e - 1) {
+          back.fill(0, to, to + bw);
+        } else {
+          back.copyWithin(to, to + bw, to + 2 * bw);
+        }
+      } else if (p === e - 1) {
+        back.set(across.subarray(j * bw, j * bw + bw), to);
+      } else {
         for (let i = 0, from = j * bw, next = to + bw; i < bw; i++) {
           const v = across[from + i];
           const m = back[next + i];
-          back[to + i] = v > m ? v : m;
+          back[to + i] = Math.max(v, m);
         }
+      }
     }
   }
-  for (let j = 0; j < lh; j++)
+  for (let j = 0; j < lh; j++) {
     for (let i = 0, a = j * bw, c = (j + w - 1) * bw, o = j * lw + x0; i < bw; i++) {
       const x = back[a + i];
       const y = fore[c + i];
-      out[o + i] = x > y ? x : y;
+      out[o + i] = Math.max(x, y);
     }
+  }
 }
 
 export function reach(
@@ -353,8 +400,9 @@ export function reach(
   ry: number,
 ): Uint8Array {
   const out = new Uint8Array(lw * lh);
-  for (let x0 = 0; x0 < lw; x0 += BAND)
+  for (let x0 = 0; x0 < lw; x0 += BAND) {
     reachBand(pixels, lw, lh, rx, ry, x0, Math.min(lw, x0 + BAND), out);
+  }
   return out;
 }
 
@@ -375,7 +423,9 @@ export const reachLazily = (layer: CloudLayer, rx: number, ry: number): Reach =>
 });
 
 export function reachAt(r: Reach, i: number, j: number, lw: number): number {
-  if (r.done[i >> BAND_BITS] === 0) workOut(r, i >> BAND_BITS);
+  if (r.done[i >> BAND_BITS] === 0) {
+    workOut(r, i >> BAND_BITS);
+  }
   return r.out[j * lw + i];
 }
 
@@ -408,10 +458,12 @@ export function skyCells(o: {
   const { columns, rows } = still;
   const density = new Float32Array(columns * rows);
   still.text.split("\n").forEach((line, r) => {
-    if (r >= rows) return;
-    for (let c = 0; c < Math.min(columns, line.length); c++)
-      density[r * columns + c] =
-        Math.max(0, SKY_RAMP.indexOf(line[c])) / (SKY_RAMP.length - 1);
+    if (r >= rows) {
+      return;
+    }
+    for (let c = 0; c < Math.min(columns, line.length); c++) {
+      density[r * columns + c] = Math.max(0, SKY_RAMP.indexOf(line[c])) / (SKY_RAMP.length - 1);
+    }
   });
   const stillAt = (x: number, y: number) => {
     const c = wrap(Math.floor(x / still.cw), columns);
@@ -419,12 +471,7 @@ export function skyCells(o: {
     return r * columns + c;
   };
 
-  const sample = (
-    layer: CloudLayer,
-    x: number,
-    y: number,
-    out: Float32Array,
-  ) => {
+  const sample = (layer: CloudLayer, x: number, y: number, out: Float32Array) => {
     const { pixels, width: lw, height: lh } = layer;
     const fx = wrap(x / 2, lw) - 0.5;
     const fy = Math.min(lh - 1.001, Math.max(0, y / 2 - 0.5));
@@ -442,15 +489,9 @@ export function skyCells(o: {
     const wb = u * (1 - v);
     const wc = (1 - u) * v;
     const wd = u * v;
-    out[0] =
-      pixels[ia] * wa + pixels[ib] * wb + pixels[ic] * wc + pixels[id] * wd;
-    out[1] =
-      pixels[ia + 1] * wa +
-      pixels[ib + 1] * wb +
-      pixels[ic + 1] * wc +
-      pixels[id + 1] * wd;
+    out[0] = pixels[ia] * wa + pixels[ib] * wb + pixels[ic] * wc + pixels[id] * wd;
+    out[1] = pixels[ia + 1] * wa + pixels[ib + 1] * wb + pixels[ic + 1] * wc + pixels[id + 1] * wd;
   };
-  const REACH = 6;
   const around = (layer: CloudLayer, scale: number) =>
     reachLazily(
       layer,
@@ -458,7 +499,9 @@ export function skyCells(o: {
       REACH + Math.ceil(((BILLOW.y + CURL.y) * scale) / 2),
     );
   const findClouds = (smallest: number) => {
-    if (!noise.length) noise = makeNoise();
+    if (noise.length === 0) {
+      noise = makeNoise();
+    }
     const nearer = smallest > 0 ? bigClouds(near, smallest) : near;
     return {
       near: nearer,
@@ -469,15 +512,17 @@ export function skyCells(o: {
     };
   };
   const found: Partial<Record<SkyTheme, ReturnType<typeof findClouds>>> = {};
-  const nearby = (layer: CloudLayer, around: Reach, x: number, y: number) => {
+  const nearby = (layer: CloudLayer, reachOf: Reach, x: number, y: number) => {
     const { width: lw, height: lh } = layer;
     const i = wrap(Math.floor(x / 2), lw);
     const j = Math.min(lh - 1, Math.max(0, Math.floor(y / 2)));
-    return reachAt(around, i, j, lw);
+    return reachAt(reachOf, i, j, lw);
   };
   const table = (fn: (v: number) => number) => {
     const t = new Float32Array(256);
-    for (let v = 0; v < 256; v++) t[v] = fn(v);
+    for (let v = 0; v < 256; v++) {
+      t[v] = fn(v);
+    }
     return t;
   };
   const cover = table((v) => smooth(0.2, 0.7, v / 255));
@@ -492,35 +537,33 @@ export function skyCells(o: {
   const n = new Float32Array(2);
   const f = new Float32Array(2);
 
-  const KEEP_SHADE = 0.8;
-  const KEEP_SHAPE = 0.1;
-
-  const shadeGlyph = (
-    theme: SkyTheme,
-    shade: number,
-    jitter: number,
-    shown: number,
-  ) => {
+  const shadeGlyph = (theme: SkyTheme, shade: number, jitter: number, shown: number) => {
     const glyphs = shading[theme];
     const at = shade ** 1.35 * (glyphs.length - 0.5) + jitter;
     const j = shown < 0 ? -1 : glyphs.indexOf(shown);
-    if (j >= 0 && Math.abs(j + 0.5 - at) < KEEP_SHADE) return shown;
+    if (j >= 0 && Math.abs(j + 0.5 - at) < KEEP_SHADE) {
+      return shown;
+    }
     return glyphs[Math.min(glyphs.length - 1, Math.max(0, Math.floor(at)))];
   };
   const shapeGlyph = (shown: number) => {
     let best = -1;
     let bestD = 0;
-    for (let k = 0; k < 6; k++) bestD += want[k] * want[k];
+    for (let k = 0; k < 6; k++) {
+      bestD += want[k] * want[k];
+    }
     let shownD = shown === -1 ? bestD : Number.POSITIVE_INFINITY;
     for (let e = 0; e < EDGE.length; e++) {
       const g = EDGE[e];
       let d = EDGE_COST[e];
       const s = g * 6;
       for (let k = 0; k < 6; k++) {
-        const e = shapes[s + k] - want[k];
-        d += e * e;
+        const diff = shapes[s + k] - want[k];
+        d += diff * diff;
       }
-      if (g === shown) shownD = d;
+      if (g === shown) {
+        shownD = d;
+      }
       if (d < bestD) {
         bestD = d;
         best = g;
@@ -528,12 +571,13 @@ export function skyCells(o: {
     }
     return shownD <= bestD + KEEP_SHAPE ? shown : best;
   };
-  const lerp = (colours: readonly Rgb[], shade: number, out: number[], at: number) => {
+  const lerp = (colours: readonly Rgb[], shade: number, out: number[], from: number) => {
     const p = Math.min(colours.length - 1.0001, Math.max(0, shade) * (colours.length - 1));
     const j = Math.floor(p);
     const q = p - j;
-    for (let k = 0; k < 3; k++)
-      out[at + k] = colours[j][k] + (colours[j + 1][k] - colours[j][k]) * q;
+    for (let k = 0; k < 3; k++) {
+      out[from + k] = colours[j][k] + (colours[j + 1][k] - colours[j][k]) * q;
+    }
   };
 
   let noise = new Float32Array(0);
@@ -567,13 +611,7 @@ export function skyCells(o: {
     farShift = drift(seconds, WIND.far, 3);
   };
 
-  const shapeAt = (
-    u: number,
-    y: number,
-    scale: number,
-    seed: number,
-    out: Float32Array,
-  ) => {
+  const shapeAt = (u: number, y: number, scale: number, seed: number, out: Float32Array) => {
     const s = NOISE_CELL / scale;
     noiseAt(
       ((u + BILLOW.drift[0] * time) * s) / BILLOW.across + seed,
@@ -599,12 +637,9 @@ export function skyCells(o: {
   const covered = (v: number, fray: number) => {
     const c = v / 255;
     const frayed = (c + fray * 4 * c * (1 - c)) * 255;
-    return cover[frayed < 0 ? 0 : frayed > 255 ? 255 : frayed | 0];
+    return cover[toByte(frayed)];
   };
-  const shadeOf = (v: number, by: number) => {
-    const s = v + by;
-    return s < 0 ? 0 : s > 255 ? 255 : s | 0;
-  };
+  const shadeOf = (v: number, by: number) => toByte(v + by);
 
   const cell = (
     x0: number,
@@ -621,8 +656,8 @@ export function skyCells(o: {
     const cy = y0 + ch / 2;
     const i = stillAt(cx, cy);
     const map = still.rgb[theme];
-    x0 -= pushX;
-    y0 -= pushY;
+    const left = x0 - pushX;
+    const top = y0 - pushY;
     const lx = cx - pushX;
     const ly = cy - pushY;
     let hasNear = false;
@@ -638,27 +673,28 @@ export function skyCells(o: {
       if (hasNear) {
         shapeAt(lx - nearShift, ly, 1, 0, nearShape);
         hasNear =
-          nearby(
-            nearer,
-            c.nearAround,
-            lx - nearShift + nearShape[0],
-            ly + nearShape[1],
-          ) >= 3;
+          nearby(nearer, c.nearAround, lx - nearShift + nearShape[0], ly + nearShape[1]) >= 3;
       }
       if (hasFar) {
         shapeAt(lx - farShift, ly, FAR_SCALE, 37.1, farShape);
-        hasFar =
-          nearby(far, c.farAround, lx - farShift + farShape[0], ly + farShape[1]) >=
-          3;
+        hasFar = nearby(far, c.farAround, lx - farShift + farShape[0], ly + farShape[1]) >= 3;
       }
     }
-    out[0] = out[4] = map[i * 4];
-    out[1] = out[5] = map[i * 4 + 1];
-    out[2] = out[6] = map[i * 4 + 2];
+    const skyR = map[i * 4];
+    const skyG = map[i * 4 + 1];
+    const skyB = map[i * 4 + 2];
+    out[0] = skyR;
+    out[4] = skyR;
+    out[1] = skyG;
+    out[5] = skyG;
+    out[2] = skyB;
+    out[6] = skyB;
     out[3] = density[i];
     const wash = t.wash[0] + (t.wash[1] - t.wash[0]) * density[i];
     out[7] = wash;
-    if (!hasNear && !hasFar) return OPEN_SKY;
+    if (!(hasNear || hasFar)) {
+      return OPEN_SKY;
+    }
     let sum = 0;
     let bare = 1;
     let most = 0;
@@ -669,8 +705,8 @@ export function skyCells(o: {
     let sN = 0;
     let sF = 0;
     for (let k = 0; k < 6; k++) {
-      const x = x0 + REGIONS[k][0] * cw;
-      const y = y0 + REGIONS[k][1] * ch;
+      const x = left + REGIONS[k][0] * cw;
+      const y = top + REGIONS[k][1] * ch;
       if (hasNear) {
         sample(nearer, x - nearShift + nearShape[0], y + nearShape[1], n);
         aN = covered(n[1], nearShape[2]);
@@ -689,20 +725,23 @@ export function skyCells(o: {
       nearSum += aN;
       shaded += (aN * sN + aF * (1 - aN) * sF) / 255;
     }
-    if (most < 0.14) return OPEN_SKY;
+    if (most < 0.14) {
+      return OPEN_SKY;
+    }
     const shade = sum > 0 ? shaded / sum : 0;
-    const cover = sum / 6;
+    const coverage = sum / 6;
     const onNear = nearSum >= sum * 0.5;
     const u = Math.floor((lx - (onNear ? nearShift : farShift)) / cw);
     const v = Math.floor(ly / ch);
-    const inside = cover >= 0.6 && bare >= 0.3;
+    const inside = coverage >= 0.6 && bare >= 0.3;
     lerp(t.tile, shade, tile, 0);
     const a =
-      (inside ? smooth(0.55, 0.9, cover) : 0.8 * smooth(0.15, 0.9, cover)) *
+      (inside ? smooth(0.55, 0.9, coverage) : 0.8 * smooth(0.15, 0.9, coverage)) *
       (onNear ? 1 : 0.85);
     const shown7 = a + (1 - a) * wash;
-    for (let k = 0; k < 3; k++)
+    for (let k = 0; k < 3; k++) {
       out[4 + k] = (a * tile[k] + (1 - a) * wash * out[4 + k]) / shown7;
+    }
     out[7] = shown7;
     if (inside) {
       lerp(t.glyph, shade, out, 0);

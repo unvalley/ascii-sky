@@ -1,8 +1,8 @@
 import { type Air, seenAt } from "./air.ts";
 import { GLYPHS, OPEN_SKY, SKY_RAMP, type SkyCells, type SkyTheme } from "./cells.ts";
 import type { Grid } from "./grid.ts";
-import { type Sparkles, TINTS } from "./sparkle.ts";
 import { hash } from "./hash.ts";
+import { type Sparkles, TINTS } from "./sparkle.ts";
 import { sine } from "./wave.ts";
 
 export type Theme = SkyTheme;
@@ -33,8 +33,7 @@ export type Stars = Readonly<{
 }>;
 const NO_STARS: Stars = { stars: 0, star: [255, 255, 255], glow: GLOW.dark };
 const STAR = [".", ".", ".", ".", ".", ".", ".", "+", "+", "*"].map(glyph);
-export const starAt = (sc: number, r: number, share: number): boolean =>
-  hash(sc, r, 101) < share;
+export const starAt = (sc: number, r: number, share: number): boolean => hash(sc, r, 101) < share;
 export const UNDRAWN = -2;
 
 export type Frame = Readonly<{
@@ -68,20 +67,25 @@ export function createFrame(
 
 export function breathing(cols: number, rows: number): Float32Array {
   const breath = new Float32Array(cols * rows * 2);
-  for (let r = 0; r < rows; r++)
+  for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = (r * cols + c) * 2;
       breath[i] = hash(c, r, 23) * Math.PI * 2;
       breath[i + 1] = 0.25 + hash(c, r, 37) * 0.9;
     }
+  }
   return breath;
 }
 
 export function streak(vx: number, vy: number, glow: number): number {
   const ax = Math.abs(vx);
   const ay = Math.abs(vy);
-  if (ax > ay * LEVEL) return glow > GUSTY ? GUST : ALONG;
-  if (ay > ax * LEVEL) return UP;
+  if (ax > ay * LEVEL) {
+    return glow > GUSTY ? GUST : ALONG;
+  }
+  if (ay > ax * LEVEL) {
+    return UP;
+  }
   return vx * vy < 0 ? RISING : FALLING;
 }
 
@@ -111,20 +115,30 @@ export function shadeFrame(
   const { vx, vy, dx, dy } = air;
   const airGlow = air.glow;
   const top = RAMP.length - 1;
-  for (let c = 0; c < cols; c++) bandAcross[c] = Math.sin(c * 0.09 + t * 0.3);
-  for (let r = 0; r < rows; r++) bandDown[r] = Math.sin(r * 0.15 - t * 0.23);
+  for (let c = 0; c < cols; c++) {
+    bandAcross[c] = Math.sin(c * 0.09 + t * 0.3);
+  }
+  for (let r = 0; r < rows; r++) {
+    bandDown[r] = Math.sin(r * 0.15 - t * 0.23);
+  }
   cells.at(t);
 
   let n = 0;
   for (let r = 0; r < rows; r++) {
-    if (r >= faintRow && half !== EVERY_ROW && (r & 1) !== half) continue;
+    if (r >= faintRow && half !== EVERY_ROW && (r & 1) !== half) {
+      continue;
+    }
     const offTurn = every > 1 && half !== EVERY_ROW && r % every !== turn;
-    if (offTurn && !stirred && !sparks?.touchedRows[r]) continue;
+    if (offTurn && !stirred && !sparks?.touchedRows[r]) {
+      continue;
+    }
     const y = r * ch;
     const down = bandDown[r];
     for (let c = 0; c < cols; c++) {
       const k = r * cols + c;
-      if (offTurn && !seenAt(air, k) && !sparks?.touched[k]) continue;
+      if (offTurn && !seenAt(air, k) && !sparks?.touched[k]) {
+        continue;
+      }
       const o = k * 4;
       const was = shown[k];
       let code = cells.cell(
@@ -170,15 +184,21 @@ export function shadeFrame(
         }
         const g = stirred ? Math.min(1, airGlow[k]) : 0;
         if (g > UNLIT) {
-          alpha = alpha + (1 - alpha) * g;
+          alpha += (1 - alpha) * g;
           const m = Math.min(1, g * windTint.glyph);
-          for (let j = 0; j < 3; j++) out[j] += (glow[j] - out[j]) * m;
-          if (windTint.tile > 0)
-            for (let j = 0; j < 3; j++) out[4 + j] += (glow[j] - out[4 + j]) * g * windTint.tile;
+          for (let j = 0; j < 3; j++) {
+            out[j] += (glow[j] - out[j]) * m;
+          }
+          if (windTint.tile > 0) {
+            for (let j = 0; j < 3; j++) {
+              out[4 + j] += (glow[j] - out[4 + j]) * g * windTint.tile;
+            }
+          }
           const wx = vx[k];
           const wy = vy[k];
-          if (g > STREAK.glow && Math.abs(wx) + Math.abs(wy) > STREAK.speed)
+          if (g > STREAK.glow && Math.abs(wx) + Math.abs(wy) > STREAK.speed) {
             code = streak(wx, wy, g);
+          }
         }
       }
       colours[o] = out[0];
@@ -189,11 +209,15 @@ export function shadeFrame(
       tiles[o + 1] = out[5];
       tiles[o + 2] = out[6];
       tiles[o + 3] = (out[7] * 255 + 0.5) | 0;
-      if (code === shown[k]) continue;
+      if (code === shown[k]) {
+        continue;
+      }
       shown[k] = code;
       changed[n++] = k;
     }
-    if (sparks) sparks.touchedRows[r] = 0;
+    if (sparks) {
+      sparks.touchedRows[r] = 0;
+    }
   }
   return n;
 }

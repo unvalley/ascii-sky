@@ -1,0 +1,94 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": ["src/**", "scripts/**", "demo/**", "!demo/dist"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "all",
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "off",
+        "noExcessiveLinesPerFunction": "off",
+        "useMaxParams": "off"
+      },
+      "correctness": {
+        "noNodejsModules": "off",
+        "noReactNativeRawText": "off",
+        "noSolidDestructuredProps": "off",
+        "useQwikValidLexicalScope": "off",
+        "noUnresolvedImports": "off"
+      },
+      "performance": {
+        "useSolidForComponent": "off"
+      },
+      "style": {
+        "noContinue": "off",
+        "noExcessiveLinesPerFile": "off",
+        "noHexColors": "off",
+        "noIncrementDecrement": "off",
+        "noInlineStyles": "off",
+        "noJsxLiterals": "off",
+        "noMagicNumbers": "off",
+        "noTernary": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "error",
+          "options": {
+            "style": "type"
+          }
+        },
+        "useExportsLast": "off",
+        "useConsistentTestIt": {
+          "level": "error",
+          "options": {
+            "function": "test",
+            "withinDescribe": "test"
+          }
+        },
+        "useDestructuring": "off"
+      },
+      "suspicious": {
+        "noBitwiseOperators": "off",
+        "noReactSpecificProps": "off",
+        "noUnnecessaryConditions": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["scripts/**", "demo/vite.config.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noProcessGlobal": "off"
+          },
+          "style": {
+            "noProcessEnv": "off",
+            "noDefaultExport": "off"
+          },
+          "suspicious": {
+            "noConsole": "off"
+          },
+          "performance": {
+            "noAwaitInLoops": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/index.ts"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noBarrelFile": "off"
+          }
+        }
+      }
+    }
+  ]
+}

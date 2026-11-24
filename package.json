@@ -2,7 +2,17 @@
   "name": "ascii-sky",
   "version": "0.1.0",
   "description": "A painted blue sky in ASCII on a canvas: clouds drift on the wind, the pointer stirs the air, and at night the stars twinkle.",
-  "keywords": ["ascii", "ascii-art", "canvas", "sky", "clouds", "animation", "background", "hero", "react"],
+  "keywords": [
+    "ascii",
+    "ascii-art",
+    "canvas",
+    "sky",
+    "clouds",
+    "animation",
+    "background",
+    "hero",
+    "react"
+  ],
   "license": "MIT",
   "author": "unvalley",
   "homepage": "https://github.com/unvalley/ascii-sky#readme",
@@ -25,10 +35,15 @@
     "./assets/*": "./assets/*",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "assets"],
+  "files": [
+    "dist",
+    "assets"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc",
+    "lint": "biome check --error-on-warnings",
+    "lint:fix": "biome check --write",
     "test": "node --test \"src/*.test.ts\"",
     "bench": "node scripts/bench.mjs",
     "dev": "vite demo",
@@ -44,6 +59,7 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.9",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

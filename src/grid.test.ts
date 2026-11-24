@@ -27,8 +27,12 @@ describe("layoutGrid", () => {
     });
 
     test(`${width} px: cells tile the canvas without gaps or overlaps`, () => {
-      for (let c = 0; c + 1 < g.cols; c++) assert.equal(g.left[c] + g.across[c], g.left[c + 1]);
-      for (let r = 0; r + 1 < g.rows; r++) assert.equal(g.top[r] + g.down[r], g.top[r + 1]);
+      for (let c = 0; c + 1 < g.cols; c++) {
+        assert.equal(g.left[c] + g.across[c], g.left[c + 1]);
+      }
+      for (let r = 0; r + 1 < g.rows; r++) {
+        assert.equal(g.top[r] + g.down[r], g.top[r + 1]);
+      }
     });
 
     test(`${width} px: the still sky is centred`, () => {

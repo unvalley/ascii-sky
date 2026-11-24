@@ -4,7 +4,9 @@ import { wrap } from "./wrap.ts";
 
 const slow = (x: number, n: number) => {
   let w = x % n;
-  if (w < 0) w += n;
+  if (w < 0) {
+    w += n;
+  }
   return w;
 };
 
@@ -12,12 +14,12 @@ describe("wrap", () => {
   test("is x % n made positive, to the last bit", () => {
     let seed = 1;
     const rand = () => {
-      seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
-      return seed / 4294967296;
+      seed = (Math.imul(seed, 1_103_515_245) + 12_345) >>> 0;
+      return seed / 4_294_967_296;
     };
     for (const n of [128, 1200, 400, 7]) {
-      for (let i = 0; i < 20000; i++) {
-        const x = (rand() - 0.5) * 2 ** (1 + ((i % 7) * 4));
+      for (let i = 0; i < 20_000; i++) {
+        const x = (rand() - 0.5) * 2 ** (1 + (i % 7) * 4);
         assert.ok(wrap(x, n) === slow(x, n), `wrap(${x}, ${n})`);
       }
     }

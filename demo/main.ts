@@ -1,45 +1,69 @@
 /// <reference types="vite/client" />
 import { mountSky, SKY_HEIGHT, type SkyTheme, stillSky, type ThemeChoice } from "../src/index.ts";
 
+const CHOICES: readonly string[] = ["auto", "light", "dark", "vice"];
+const STORE_KEY = "ascii-sky-theme";
+
 const root = document.documentElement;
 const box = document.querySelector<HTMLElement>(".sky");
 const canvas = document.querySelector<HTMLCanvasElement>(".sky canvas");
 const still = document.querySelector<HTMLElement>(".sky-still");
-if (!box || !canvas || !still) throw new Error("demo: the sky's elements are missing");
+const themes = document.querySelector<HTMLElement>(".themes");
+if (!(box && canvas && still && themes)) {
+  throw new Error("demo: the sky's elements are missing");
+}
 
 const assets = import.meta.env.BASE_URL;
-const dark = window.matchMedia("(prefers-color-scheme: dark)");
-const resolve = (choice: ThemeChoice): SkyTheme =>
-  choice === "auto" ? (dark.matches ? "dark" : "light") : choice;
+const darkScheme = globalThis.matchMedia("(prefers-color-scheme: dark)");
+const skyFor = (wanted: ThemeChoice): SkyTheme => {
+  if (wanted !== "auto") {
+    return wanted;
+  }
+  return darkScheme.matches ? "dark" : "light";
+};
 
-const CHOICES: readonly string[] = ["auto", "light", "dark", "vice"];
-const saved = (() => {
+const load = (): string | null => {
   try {
-    return localStorage.getItem("ascii-sky-theme");
+    return localStorage.getItem(STORE_KEY);
   } catch {
     return null;
   }
-})();
-let choice = (saved && CHOICES.includes(saved) ? saved : "auto") as ThemeChoice;
+};
+const save = (value: string): boolean => {
+  try {
+    localStorage.setItem(STORE_KEY, value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const saved = load();
+let choice = (saved !== null && CHOICES.includes(saved) ? saved : "auto") as ThemeChoice;
 
 box.style.height = `${SKY_HEIGHT}px`;
 const sky = mountSky(canvas, { assets, theme: choice });
-sky.ready.catch((error) => console.error(error));
 
-const buttons = [...document.querySelectorAll<HTMLButtonElement>(".themes button")];
+const buttons = [...themes.querySelectorAll<HTMLButtonElement>("button")];
 const show = () => {
   root.dataset.theme = choice;
-  Object.assign(still.style, stillSky(resolve(choice), assets));
-  for (const b of buttons) b.setAttribute("aria-pressed", String(b.dataset.theme === choice));
+  const { background, imageRendering, opacity } = stillSky(skyFor(choice), assets);
+  still.style.background = background;
+  still.style.imageRendering = imageRendering;
+  still.style.setProperty("--still-opacity", String(opacity));
+  for (const button of buttons) {
+    button.setAttribute("aria-pressed", String(button.dataset.theme === choice));
+  }
 };
-for (const b of buttons)
-  b.addEventListener("click", () => {
-    choice = (b.dataset.theme ?? "auto") as ThemeChoice;
-    try {
-      localStorage.setItem("ascii-sky-theme", choice);
-    } catch {}
-    sky.setTheme(choice);
-    show();
-  });
-dark.addEventListener("change", show);
+themes.addEventListener("click", (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>("button");
+  if (!button) {
+    return;
+  }
+  choice = (button.dataset.theme ?? "auto") as ThemeChoice;
+  save(choice);
+  sky.setTheme(choice);
+  show();
+});
+darkScheme.addEventListener("change", show);
 show();

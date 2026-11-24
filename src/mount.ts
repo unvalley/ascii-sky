@@ -26,11 +26,15 @@ export function mountSky(
   let stopped = false;
   const ready = loadSky(assets, loading.signal).then(
     (cells) => {
-      if (stopped) return;
+      if (stopped) {
+        return;
+      }
       running = startSky(canvas, cells, SKY_WIDTH, SKY_CELL, { ...options, night, theme: choice });
     },
     (error: unknown) => {
-      if (!stopped) throw error;
+      if (!stopped) {
+        throw error;
+      }
     },
   );
   return {

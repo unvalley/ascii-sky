@@ -22,21 +22,27 @@ const at = (air: ReturnType<typeof createAir>, x: number, y: number) =>
   Math.floor(y / CH) * air.cols + Math.floor(x / CW);
 const still = (a: Float32Array) => a.every((v) => v === 0);
 const settle = (air: ReturnType<typeof createAir>, seconds: number) => {
-  for (let i = 0; i < seconds / STEP; i++) stepAir(air, STEP);
+  for (let i = 0; i < seconds / STEP; i++) {
+    stepAir(air, STEP);
+  }
 };
 
 describe("lively air", () => {
   test("a sweep makes the air lively; it settles well before the air is still", () => {
     const air = createAir(40, 30, CW, CH);
     assert.equal(air.lively, false);
-    for (let i = 0; i <= 10; i++) blow(air, 40 + i * 20, 150, 1000 + i * 16);
+    for (let i = 0; i <= 10; i++) {
+      blow(air, 40 + i * 20, 150, 1000 + i * 16);
+    }
     assert.equal(air.lively, true);
     stepAir(air, STEP);
     assert.equal(air.lively, true);
     let settled = 0;
     for (let i = 1; air.stirred && i < 60 * 60; i++) {
       stepAir(air, STEP);
-      if (!air.lively && !settled) settled = i * STEP;
+      if (!(air.lively || settled)) {
+        settled = i * STEP;
+      }
     }
     assert.ok(settled > 0, "settles");
     assert.ok(air.stirred === false);
@@ -44,10 +50,14 @@ describe("lively air", () => {
 
   test("lively while any cell shows, and only then", () => {
     const air = createAir(40, 30, CW, CH);
-    for (let i = 0; i <= 10; i++) blow(air, 40 + i * 20, 150, 1000 + i * 16);
+    for (let i = 0; i <= 10; i++) {
+      blow(air, 40 + i * 20, 150, 1000 + i * 16);
+    }
     for (let s = 0; s < 60 * 20 && air.stirred; s++) {
       stepAir(air, STEP);
-      const any = Array.from({ length: air.cols * air.rows }, (_, k) => seenAt(air, k)).some(Boolean);
+      const any = Array.from({ length: air.cols * air.rows }, (_, k) => seenAt(air, k)).some(
+        Boolean,
+      );
       assert.equal(air.lively, any, `step ${s}`);
     }
   });
@@ -70,7 +80,9 @@ describe("air", () => {
     const air = createAir(40, 30, CW, CH);
     stepAir(air, STEP);
     assert.equal(air.stirred, false);
-    for (const f of [air.vx, air.vy, air.dx, air.dy, air.glow]) assert.ok(still(f));
+    for (const f of [air.vx, air.vy, air.dx, air.dy, air.glow]) {
+      assert.ok(still(f));
+    }
   });
 
   test("the pointer's first move only says where it is", () => {
@@ -96,7 +108,9 @@ describe("air", () => {
     const air = createAir(40, 30, CW, CH);
     blow(air, 0, 100, 1000);
     blow(air, 300, 100, 1001);
-    for (const v of air.vx) assert.ok(v <= 900 * 0.55 + 1e-3);
+    for (const v of air.vx) {
+      assert.ok(v <= 900 * 0.55 + 1e-3);
+    }
   });
 
   test("after the pointer leaves, its next move starts afresh", () => {
@@ -116,12 +130,13 @@ describe("air", () => {
     const out = () => {
       let sum = 0;
       let weight = 0;
-      for (let r = 0; r < air.rows; r++)
+      for (let r = 0; r < air.rows; r++) {
         for (let c = 0; c < air.cols; c++) {
           const g = air.glow[r * air.cols + c];
           sum += g * Math.hypot((c + 0.5) * CW - x, (r + 0.5) * CH - y);
           weight += g;
         }
+      }
       return sum / weight;
     };
     settle(air, STEP * 6);
@@ -140,14 +155,21 @@ describe("air", () => {
     let right = 0;
     let up = 0;
     let down = 0;
-    for (let r = 0; r < air.rows; r++)
+    for (let r = 0; r < air.rows; r++) {
       for (let c = 0; c < air.cols; c++) {
         const i = r * air.cols + c;
-        if ((c + 0.5) * CW < x) left += air.vx[i];
-        else right += air.vx[i];
-        if ((r + 0.5) * CH < y) up += air.vy[i];
-        else down += air.vy[i];
+        if ((c + 0.5) * CW < x) {
+          left += air.vx[i];
+        } else {
+          right += air.vx[i];
+        }
+        if ((r + 0.5) * CH < y) {
+          up += air.vy[i];
+        } else {
+          down += air.vy[i];
+        }
       }
+    }
     assert.ok(left < 0 && right > 0, `${left} ${right}`);
     assert.ok(up < 0 && down > 0, `${up} ${down}`);
   });
@@ -182,7 +204,9 @@ describe("air", () => {
       settle(air, STEP * 3);
     }
     assert.equal(air.puffs, 7);
-    for (let g = 0; g < air.gusts.length; g += GUST_SIZE) assert.ok(air.gusts[g + 2] >= 0);
+    for (let g = 0; g < air.gusts.length; g += GUST_SIZE) {
+      assert.ok(air.gusts[g + 2] >= 0);
+    }
   });
 
   test("the same clicks blow the same way", () => {
@@ -206,8 +230,9 @@ describe("air", () => {
       puff(air, 160, 180);
       stepAir(air, STEP);
     }
-    for (let i = 0; i < air.dx.length; i++)
+    for (let i = 0; i < air.dx.length; i++) {
       assert.ok(Math.hypot(air.dx[i], air.dy[i]) <= MOST_PUSH + 1e-3);
+    }
   });
 
   test("settles back to still once the gusts have blown, and stops working", () => {
@@ -215,8 +240,12 @@ describe("air", () => {
     puff(air, 160, 180);
     settle(air, 30);
     assert.equal(air.stirred, false);
-    for (const f of [air.vx, air.vy, air.dx, air.dy, air.glow]) assert.ok(still(f));
-    for (let g = 0; g < air.gusts.length; g += GUST_SIZE) assert.ok(air.gusts[g + 2] < 0);
+    for (const f of [air.vx, air.vy, air.dx, air.dy, air.glow]) {
+      assert.ok(still(f));
+    }
+    for (let g = 0; g < air.gusts.length; g += GUST_SIZE) {
+      assert.ok(air.gusts[g + 2] < 0);
+    }
   });
 
   test("keeps moving when only the cells' size changes", () => {

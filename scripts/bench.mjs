@@ -56,7 +56,9 @@ function bench(width, dpr) {
       if (stir) {
         const x = (width / 2) * (1 + Math.sin(i / 20));
         blow(air, x, 150 + 80 * Math.sin(i / 13), i * 16.7);
-        if (i % 60 === 0) puff(air, x, 200);
+        if (i % 60 === 0) {
+          puff(air, x, 200);
+        }
       }
       const a = performance.now();
       stepAir(air, STEP);

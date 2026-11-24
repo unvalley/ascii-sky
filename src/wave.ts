@@ -1,6 +1,8 @@
 const SIZE = 4096;
 const TABLE = new Float64Array(SIZE + 1);
-for (let i = 0; i <= SIZE; i++) TABLE[i] = Math.sin((i / SIZE) * Math.PI * 2);
+for (let i = 0; i <= SIZE; i++) {
+  TABLE[i] = Math.sin((i / SIZE) * Math.PI * 2);
+}
 const PER_RADIAN = SIZE / (Math.PI * 2);
 
 export function sine(a: number): number {

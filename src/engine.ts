@@ -15,7 +15,6 @@ import {
   stepsFor,
 } from "./clock.ts";
 import { type Cell, type Grid, layoutGrid } from "./grid.ts";
-import { createSparkles, type Sparkles, stepSparkles } from "./sparkle.ts";
 import { composite, createLayers, sizeLayers, stamp } from "./paint.ts";
 import {
   createFrame,
@@ -27,6 +26,7 @@ import {
   type Theme,
   TURNS,
 } from "./shade.ts";
+import { createSparkles, type Sparkles, stepSparkles } from "./sparkle.ts";
 
 const MOST_DPR = 3;
 export const CONTROLS = "a, button, input, textarea, select, label, [role]";
@@ -41,8 +41,8 @@ export type SkyOptions = {
 };
 
 export type Sky = {
-  setTheme(theme: ThemeChoice): void;
-  stop(): void;
+  setTheme: (theme: ThemeChoice) => void;
+  stop: () => void;
 };
 
 export function startSky(
@@ -53,11 +53,15 @@ export function startSky(
   { theme: chosen = "auto", faintFrom, ignore = CONTROLS, night }: SkyOptions = {},
 ): Sky {
   const layers = createLayers(canvas);
-  const still = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+  const still = globalThis.matchMedia("(prefers-reduced-motion: reduce)");
+  const darkScheme = globalThis.matchMedia("(prefers-color-scheme: dark)");
   let choice = chosen;
-  const themeOf = (): Theme =>
-    choice === "auto" ? (darkScheme.matches ? "dark" : "light") : choice;
+  const themeOf = (): Theme => {
+    if (choice !== "auto") {
+      return choice;
+    }
+    return darkScheme.matches ? "dark" : "light";
+  };
 
   let grid: Grid | null = null;
   let faintAt = 0;
@@ -65,8 +69,8 @@ export function startSky(
   let frame: Frame | null = null;
   let sparkles: Sparkles | null = null;
   const isStar = (c: number, r: number) =>
-    !!grid &&
-    !!night &&
+    grid !== null &&
+    night !== undefined &&
     starAt(Math.floor((grid.originX + c * grid.cw + grid.skyX) / grid.cw), r, night.stars);
   let images: { colours: ImageData; tiles: ImageData } | null = null;
   let air: Air = createAir(0, 0, 1, 1);
@@ -87,7 +91,9 @@ export function startSky(
 
   let drawn = 0;
   const draw = (half: number, every = TURNS) => {
-    if (!grid || !atlas || !frame || !images) return;
+    if (!(grid && atlas && frame && images)) {
+      return;
+    }
     const turn = half === EVERY_ROW ? 0 : drawn % every;
     const changed = shadeFrame(
       grid,
@@ -112,8 +118,10 @@ export function startSky(
 
   const resize = () => {
     const rect = canvas.getBoundingClientRect();
-    if (rect.width < 1 || rect.height < 1) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, MOST_DPR);
+    if (rect.width < 1 || rect.height < 1) {
+      return;
+    }
+    const dpr = Math.min(globalThis.devicePixelRatio || 1, MOST_DPR);
     const faint =
       faintFrom ??
       (Number.parseFloat(getComputedStyle(canvas).getPropertyValue("--sky-faint")) || 0);
@@ -123,11 +131,14 @@ export function startSky(
       grid.height === rect.height &&
       grid.dpr === dpr &&
       faint === faintAt
-    )
+    ) {
       return;
+    }
     faintAt = faint;
     const next = layoutGrid(rect.width, rect.height, dpr, skyWidth, cell, faint);
-    if (!atlas || dpr !== grid?.dpr) atlas = drawAtlas(next.cw, next.ch, dpr);
+    if (!atlas || dpr !== grid?.dpr) {
+      atlas = drawAtlas(next.cw, next.ch, dpr);
+    }
     grid = next;
     sparkles = night?.sparkle ? createSparkles(grid.cols, grid.rows) : null;
     images = sizeLayers(layers, grid);
@@ -138,7 +149,9 @@ export function startSky(
   };
 
   const pace = (next: number, now: number) => {
-    if (next === rate) return;
+    if (next === rate) {
+      return;
+    }
     rate = next;
     rateSince = now;
     costed = 0;
@@ -146,8 +159,8 @@ export function startSky(
 
   const tick = (now: number) => {
     pace(retried(rate, rateSince, now), now);
-    const calm = !air.lively;
-    const due = beat(drawnAt, calm ? Math.min(rate, CALM_RATE) : rate, now);
+    const isCalm = !air.lively;
+    const due = beat(drawnAt, isCalm ? Math.min(rate, CALM_RATE) : rate, now);
     if (Number.isNaN(due)) {
       raf = requestAnimationFrame(tick);
       return;
@@ -159,11 +172,15 @@ export function startSky(
     time += dt;
     owed += dt;
     const steps = stepsFor(owed);
-    for (let i = 0; i < steps; i++) stepAir(air, STEP);
+    for (let i = 0; i < steps; i++) {
+      stepAir(air, STEP);
+    }
     owed = owedAfter(owed, steps);
-    if (sparkles && grid && theme === "dark") stepSparkles(sparkles, dt, grid.faintRow, isStar);
-    draw(drawn++ & 1, calm ? 1 : TURNS);
-    if (!calm) {
+    if (sparkles && grid && theme === "dark") {
+      stepSparkles(sparkles, dt, grid.faintRow, isStar);
+    }
+    draw(drawn++ & 1, isCalm ? 1 : TURNS);
+    if (!isCalm) {
       costs[costed++] = performance.now() - begin;
       if (costed === PACE_FRAMES) {
         costed = 0;
@@ -175,40 +192,59 @@ export function startSky(
 
   const schedule = () => {
     cancelAnimationFrame(raf);
-    if (stopped) return;
+    if (stopped) {
+      return;
+    }
     if (still.matches) {
       time = 0;
       draw(EVERY_ROW);
       return;
     }
-    if (!visible || document.hidden) return;
+    if (!visible || document.hidden) {
+      return;
+    }
     last = performance.now();
     drawnAt = Number.NEGATIVE_INFINITY;
     raf = requestAnimationFrame(tick);
   };
 
   const onPointerMove = (e: PointerEvent) => {
-    if (still.matches || e.pointerType === "touch") return;
-    if (!visible) return calm(air);
+    if (still.matches || e.pointerType === "touch") {
+      return;
+    }
+    if (!visible) {
+      return calm(air);
+    }
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) blow(air, x, y, e.timeStamp);
-    else calm(air);
+    if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) {
+      blow(air, x, y, e.timeStamp);
+    } else {
+      calm(air);
+    }
   };
   const onPointerDown = (e: PointerEvent) => {
-    if (still.matches) return;
+    if (still.matches) {
+      return;
+    }
     const target = e.target as Element | null;
-    if (ignore && target?.closest?.(ignore)) return;
+    if (ignore && target?.closest?.(ignore)) {
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) puff(air, x, y);
+    if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) {
+      puff(air, x, y);
+    }
   };
   const onLeave = () => calm(air);
   const onTheme = () => {
     const next = themeOf();
-    if (stopped || next === theme) return;
+    if (stopped || next === theme) {
+      return;
+    }
     theme = next;
     draw(EVERY_ROW);
   };
@@ -223,10 +259,10 @@ export function startSky(
   darkScheme.addEventListener("change", onTheme);
   still.addEventListener("change", schedule);
   document.addEventListener("visibilitychange", schedule);
-  window.addEventListener("pointermove", onPointerMove, { passive: true });
-  window.addEventListener("pointerdown", onPointerDown, { passive: true });
+  globalThis.addEventListener("pointermove", onPointerMove, { passive: true });
+  globalThis.addEventListener("pointerdown", onPointerDown, { passive: true });
   document.documentElement.addEventListener("pointerleave", onLeave);
-  window.addEventListener("blur", onLeave);
+  globalThis.addEventListener("blur", onLeave);
 
   resize();
   schedule();
@@ -239,10 +275,10 @@ export function startSky(
     darkScheme.removeEventListener("change", onTheme);
     still.removeEventListener("change", schedule);
     document.removeEventListener("visibilitychange", schedule);
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerdown", onPointerDown);
+    globalThis.removeEventListener("pointermove", onPointerMove);
+    globalThis.removeEventListener("pointerdown", onPointerDown);
     document.documentElement.removeEventListener("pointerleave", onLeave);
-    window.removeEventListener("blur", onLeave);
+    globalThis.removeEventListener("blur", onLeave);
   };
 
   return {

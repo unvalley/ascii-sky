@@ -43,7 +43,6 @@
         z-index: -1;
         overflow: hidden;
         pointer-events: none;
-        user-select: none;
       }
       .sky-frame {
         position: absolute;
@@ -54,8 +53,8 @@
       .sky canvas, .sky-still { position: absolute; inset: 0; width: 100%; height: 100%; }
       .sky canvas { display: block; opacity: 0; transition: opacity 700ms; }
       .sky canvas[data-ready] { opacity: 1; }
-      .sky-still { z-index: -1; transition: opacity 700ms; }
-      .sky canvas[data-ready] + .sky-still { opacity: 0 !important; }
+      .sky-still { z-index: -1; opacity: var(--still-opacity, 0); transition: opacity 700ms; }
+      .sky canvas[data-ready] + .sky-still { opacity: 0; }
       main {
         max-width: 36rem;
         margin: 0 auto;
@@ -63,7 +62,7 @@
       }
       h1 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
       p { margin: 0.75rem 0 0; color: var(--muted); }
-      .themes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem; }
+      .themes { display: flex; flex-wrap: wrap; gap: 0.5rem; min-width: 0; margin: 1.5rem 0 0; padding: 0; border: 0; }
       .themes button {
         font: inherit;
         font-size: 0.875rem;
@@ -100,12 +99,12 @@
         A painted blue sky in ASCII, drawn on a canvas. The clouds drift on the wind; move the
         pointer over the sky to stir the air, click to send a gust. At night the stars twinkle.
       </p>
-      <div class="themes" role="group" aria-label="Theme">
+      <fieldset class="themes" aria-label="Theme">
         <button type="button" data-theme="auto">Auto</button>
         <button type="button" data-theme="light">Day</button>
         <button type="button" data-theme="dark">Night</button>
         <button type="button" data-theme="vice">GTA VI</button>
-      </div>
+      </fieldset>
       <pre><code>import { mountSky } from "ascii-sky";
 
 const sky = mountSky(canvas, { assets: "/ascii-sky/" });

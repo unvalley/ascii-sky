@@ -25,27 +25,35 @@ export function AsciiSky({
   const canvas = useRef<HTMLCanvasElement>(null);
   const sky = useRef<MountedSky | null>(null);
   const [drawn, setDrawn] = useState(false);
-  const latest = useRef({ theme, assets });
-  latest.current = { theme, assets };
-  const where = typeof assets === "object" ? JSON.stringify(assets) : assets;
+  const themeNow = useRef(theme);
+  themeNow.current = theme;
 
   useEffect(() => {
     const element = canvas.current;
-    if (!element) return;
-    const { theme, assets } = latest.current;
-    const mounted = mountSky(element, { theme, assets, faintFrom, ignore, night });
+    if (!element) {
+      return;
+    }
+    const mounted = mountSky(element, {
+      theme: themeNow.current,
+      assets,
+      faintFrom,
+      ignore,
+      night,
+    });
     sky.current = mounted;
     mounted.ready
       .then(() => {
-        if (sky.current === mounted) setDrawn(true);
+        if (sky.current === mounted) {
+          setDrawn(true);
+        }
       })
-      .catch(() => {});
+      .catch(() => undefined);
     return () => {
       mounted.stop();
       sky.current = null;
       setDrawn(false);
     };
-  }, [where, faintFrom, ignore, night]);
+  }, [assets, faintFrom, ignore, night]);
 
   useEffect(() => {
     sky.current?.setTheme(theme);
@@ -66,9 +74,9 @@ export function AsciiSky({
         ...style,
       }}
     >
-      {still && (
+      {still ? (
         <div style={{ ...fill, ...still, opacity: drawn ? 0 : still.opacity, transition: FADE }} />
-      )}
+      ) : null}
       <canvas
         ref={canvas}
         style={{ ...fill, display: "block", opacity: drawn ? 1 : 0, transition: FADE }}

@@ -79,11 +79,15 @@ export function createSparkles(cols: number, rows: number): Sparkles {
 
 function lay(sp: Sparkles, s: Sparkle, on: boolean) {
   const step = s.steps?.[s.age];
-  if (!step) return;
+  if (!step) {
+    return;
+  }
   for (const [dc, dr, glyph] of step) {
     const c = s.c + dc;
     const r = s.r + dr;
-    if (c < 0 || r < 0 || c >= sp.cols || r >= sp.rows) continue;
+    if (c < 0 || r < 0 || c >= sp.cols || r >= sp.rows) {
+      continue;
+    }
     const k = r * sp.cols + c;
     sp.code[k] = on ? glyph : -1;
     sp.tint[k] = s.tint;
@@ -94,13 +98,18 @@ function lay(sp: Sparkles, s: Sparkle, on: boolean) {
 
 function crowded(sp: Sparkles, steps: readonly Step[], c: number, r: number) {
   const reach = steps === BIG ? 2 : 0;
-  for (let dr = -1; dr <= 1; dr++)
+  for (let dr = -1; dr <= 1; dr++) {
     for (let dc = -reach; dc <= reach; dc++) {
       const cc = c + dc;
       const rr = r + dr;
-      if (cc < 0 || rr < 0 || cc >= sp.cols || rr >= sp.rows) return true;
-      if (sp.code[rr * sp.cols + cc] >= 0) return true;
+      if (cc < 0 || rr < 0 || cc >= sp.cols || rr >= sp.rows) {
+        return true;
+      }
+      if (sp.code[rr * sp.cols + cc] >= 0) {
+        return true;
+      }
     }
+  }
   return false;
 }
 
@@ -117,7 +126,9 @@ export function stepSparkles(
     let big = 0;
     let small = 0;
     for (const s of sp.pool) {
-      if (!s.steps) continue;
+      if (!s.steps) {
+        continue;
+      }
       lay(sp, s, false);
       s.age++;
       if (s.age >= s.steps.length) {
@@ -125,16 +136,23 @@ export function stepSparkles(
         continue;
       }
       lay(sp, s, true);
-      if (s.steps === BIG) big++;
-      else small++;
+      if (s.steps === BIG) {
+        big++;
+      } else {
+        small++;
+      }
     }
     const spawn = (steps: readonly Step[]) => {
       const free = sp.pool.find((s) => !s.steps);
-      if (!free) return;
+      if (!free) {
+        return;
+      }
       for (let tries = 0; tries < 24; tries++) {
         const c = 2 + Math.floor(random() * (sp.cols - 4));
         const r = 1 + Math.floor(random() * Math.max(1, Math.min(rows, sp.rows) - 2));
-        if (!isStar(c, r) || crowded(sp, steps, c, r)) continue;
+        if (!isStar(c, r) || crowded(sp, steps, c, r)) {
+          continue;
+        }
         free.steps = steps;
         free.age = 0;
         free.c = c;
@@ -144,7 +162,13 @@ export function stepSparkles(
         return;
       }
     };
-    if (big < MOST.big && random() < 0.35) spawn(BIG);
-    for (let i = 0; i < 2; i++) if (small < MOST.small && random() < 0.6) spawn(SMALL);
+    if (big < MOST.big && random() < 0.35) {
+      spawn(BIG);
+    }
+    for (let i = 0; i < 2; i++) {
+      if (small < MOST.small && random() < 0.6) {
+        spawn(SMALL);
+      }
+    }
   }
 }

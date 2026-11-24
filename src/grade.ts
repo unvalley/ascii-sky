@@ -14,7 +14,9 @@ export function toNight(
   const cos = Math.cos(turn);
   const sin = Math.sin(turn);
   text.split("\n").forEach((line, r) => {
-    if (r >= rows) return;
+    if (r >= rows) {
+      return;
+    }
     for (let c = 0; c < columns; c++) {
       const i = (r * columns + c) * channels;
       const d = Math.max(0, SKY_RAMP.indexOf(line[c] ?? ".")) / (SKY_RAMP.length - 1);

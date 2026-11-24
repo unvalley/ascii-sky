@@ -6,8 +6,8 @@ import { createSparkles, MOST, stepSparkles, TICK } from "./sparkle.ts";
 function seeded(seed = 1) {
   let s = seed;
   return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
+    s = (s * 1_664_525 + 1_013_904_223) >>> 0;
+    return s / 4_294_967_296;
   };
 }
 const shown = (code: Int16Array) => [...code].filter((c) => c >= 0).length;
@@ -17,9 +17,13 @@ describe("sparkles", () => {
     const sp = createSparkles(60, 40);
     const random = seeded(3);
     const star = (c: number, r: number) => (c * 7 + r * 13) % 11 === 0;
-    for (let i = 0; i < 40; i++) stepSparkles(sp, TICK, 20, star, random);
+    for (let i = 0; i < 40; i++) {
+      stepSparkles(sp, TICK, 20, star, random);
+    }
     for (const s of sp.pool) {
-      if (!s.steps) continue;
+      if (!s.steps) {
+        continue;
+      }
       assert.ok(star(s.c, s.r));
       assert.ok(s.r >= 1 && s.r < 20);
     }
@@ -38,9 +42,13 @@ describe("sparkles", () => {
   test("glint and go: with no stars nothing new starts, and the rest goes out", () => {
     const sp = createSparkles(60, 30);
     const random = seeded(7);
-    for (let i = 0; i < 20; i++) stepSparkles(sp, TICK, 30, () => true, random);
+    for (let i = 0; i < 20; i++) {
+      stepSparkles(sp, TICK, 30, () => true, random);
+    }
     assert.ok(shown(sp.code) > 0);
-    for (let i = 0; i < 20; i++) stepSparkles(sp, TICK, 30, () => false, random);
+    for (let i = 0; i < 20; i++) {
+      stepSparkles(sp, TICK, 30, () => false, random);
+    }
     assert.equal(shown(sp.code), 0);
     assert.ok(sp.pool.every((s) => !s.steps));
   });
@@ -48,11 +56,12 @@ describe("sparkles", () => {
   test("mark the cells, and their rows, whose glyph changed", () => {
     const sp = createSparkles(60, 30);
     stepSparkles(sp, TICK, 30, () => true, seeded(9));
-    for (let k = 0; k < sp.code.length; k++)
-      if (sp.code[k] >= 0) {
-        assert.equal(sp.touched[k], 1);
-        assert.equal(sp.touchedRows[Math.floor(k / sp.cols)], 1);
-      }
+    const drawn = [...sp.code.keys()].filter((k) => sp.code[k] >= 0);
+    assert.ok(drawn.length > 0);
+    for (const k of drawn) {
+      assert.equal(sp.touched[k], 1);
+      assert.equal(sp.touchedRows[Math.floor(k / sp.cols)], 1);
+    }
   });
 
   test("draw a sparkle's glyphs", () => {
@@ -61,9 +70,15 @@ describe("sparkles", () => {
     const seen = new Set<string>();
     for (let i = 0; i < 100; i++) {
       stepSparkles(sp, TICK, 30, () => true, random);
-      for (const c of sp.code) if (c >= 0) seen.add(GLYPHS[c]);
+      for (const c of sp.code) {
+        if (c >= 0) {
+          seen.add(GLYPHS[c]);
+        }
+      }
     }
-    for (const glyph of [".", "+", "*", "-", "|"]) assert.ok(seen.has(glyph), glyph);
+    for (const glyph of [".", "+", "*", "-", "|"]) {
+      assert.ok(seen.has(glyph), glyph);
+    }
   });
 
   test("wait for a whole tick before moving", () => {

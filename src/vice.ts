@@ -13,18 +13,20 @@ export const VICE_STOPS: readonly (readonly [number, string])[] = [
 const DEPTH = 0.1;
 
 const rgbOf = (hex: string) =>
-  [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [
-    number,
-    number,
-    number,
-  ];
+  [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
 
 function sunsetAt(y: number): [number, number, number] {
   const last = VICE_STOPS.length - 1;
-  if (y <= VICE_STOPS[0][0]) return oklab(...rgbOf(VICE_STOPS[0][1]));
-  if (y >= VICE_STOPS[last][0]) return oklab(...rgbOf(VICE_STOPS[last][1]));
+  if (y <= VICE_STOPS[0][0]) {
+    return oklab(...rgbOf(VICE_STOPS[0][1]));
+  }
+  if (y >= VICE_STOPS[last][0]) {
+    return oklab(...rgbOf(VICE_STOPS[last][1]));
+  }
   let i = 0;
-  while (VICE_STOPS[i + 1][0] < y) i++;
+  while (VICE_STOPS[i + 1][0] < y) {
+    i++;
+  }
   const [y0, c0] = VICE_STOPS[i];
   const [y1, c1] = VICE_STOPS[i + 1];
   const t = (y - y0) / (y1 - y0);

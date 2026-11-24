@@ -61,8 +61,9 @@ export function createAir(cols: number, rows: number, cw: number, ch: number): A
 }
 
 export function fitAir(air: Air, cols: number, rows: number, cw: number, ch: number): Air {
-  if (cols === air.cols && rows === air.rows)
+  if (cols === air.cols && rows === air.rows) {
     return cw === air.cw && ch === air.ch ? air : { ...air, cw, ch };
+  }
   return { ...createAir(cols, rows, cw, ch), pointer: air.pointer };
 }
 
@@ -79,12 +80,15 @@ function around(
   const down = Math.ceil((reach * cw) / ch);
   const r1 = Math.min(rows - 1, r0 + down);
   const c1 = Math.min(cols - 1, c0 + reach);
-  for (let r = Math.max(0, r0 - down); r <= r1; r++)
+  for (let r = Math.max(0, r0 - down); r <= r1; r++) {
     for (let c = Math.max(0, c0 - reach); c <= c1; c++) {
       const d = Math.hypot(((c + 0.5) * cw - x) / cw, ((r + 0.5) * ch - y) / cw);
-      if (d > reach + 0.5) continue;
+      if (d > reach + 0.5) {
+        continue;
+      }
       visit((1 - d / (reach + 1)) ** 2, r * cols + c, c, r);
     }
+  }
   air.stirred = true;
   air.lively = true;
 }
@@ -127,7 +131,9 @@ export function puff(air: Air, x: number, y: number): void {
       at = g;
       break;
     }
-    if (age > gusts[at * GUST_SIZE + GUST_AGE]) at = g;
+    if (age > gusts[at * GUST_SIZE + GUST_AGE]) {
+      at = g;
+    }
   }
   const o = at * GUST_SIZE;
   gusts[o + GUST_X] = x;
@@ -152,8 +158,9 @@ export function lanesOf(seed: number, out: Float64Array, at: number): void {
     least = Math.min(least, h);
     most = Math.max(most, h);
   }
-  for (let k = 0; k < GUST.lanes; k++)
+  for (let k = 0; k < GUST.lanes; k++) {
     out[at + k] = smooth(0.25, 0.75, (out[at + k] - least) / (most - least || 1));
+  }
 }
 
 export function laneAt(lanes: Float64Array, at: number, angle: number): number {
@@ -178,7 +185,7 @@ function blowFront(air: Air, g: number) {
   const out = radius + band;
   const r1 = Math.min(rows - 1, Math.floor((gy + out) / ch));
   const c1 = Math.min(cols - 1, Math.floor((gx + out) / cw));
-  for (let r = Math.max(0, Math.floor((gy - out) / ch)); r <= r1; r++)
+  for (let r = Math.max(0, Math.floor((gy - out) / ch)); r <= r1; r++) {
     for (let c = Math.max(0, Math.floor((gx - out) / cw)); c <= c1; c++) {
       const ox = (c + 0.5) * cw - gx;
       const oy = (r + 0.5) * ch - gy;
@@ -191,12 +198,15 @@ function blowFront(air: Air, g: number) {
         continue;
       }
       const off = Math.abs(d - radius);
-      if (off >= band || d === 0) continue;
+      if (off >= band || d === 0) {
+        continue;
+      }
       const w = (1 - off / band) * laneAt(gusts, o + GUST_LANES, Math.atan2(oy, ox));
       vx[i] += ((ox / d) * speed - vx[i]) * w;
       vy[i] += ((oy / d) * speed - vy[i]) * w;
       glow[i] = Math.min(MOST_GLOW, glow[i] + lift * w);
     }
+  }
 }
 
 function blowGusts(air: Air, dt: number): boolean {
@@ -204,11 +214,16 @@ function blowGusts(air: Air, dt: number): boolean {
   let blowing = false;
   for (let g = 0; g < MOST_GUSTS; g++) {
     const o = g * GUST_SIZE + GUST_AGE;
-    if (gusts[o] < 0) continue;
+    if (gusts[o] < 0) {
+      continue;
+    }
     blowFront(air, g);
     gusts[o] += dt;
-    if (gusts[o] >= GUST.life) gusts[o] = -1;
-    else blowing = true;
+    if (gusts[o] >= GUST.life) {
+      gusts[o] = -1;
+    } else {
+      blowing = true;
+    }
   }
   return blowing;
 }
@@ -239,7 +254,9 @@ function spread(air: Air, field: Float32Array, share: number, keep: number) {
 }
 
 export function stepAir(air: Air, dt: number): void {
-  if (!air.stirred) return;
+  if (!air.stirred) {
+    return;
+  }
   const blowing = blowGusts(air, dt);
   const { vx, vy, dx, dy, glow } = air;
   const wind = Math.exp(-dt / WIND_LIFE);
@@ -258,8 +275,12 @@ export function stepAir(air: Air, dt: number): void {
     dy[i] = py;
     const pushed = Math.abs(px) + Math.abs(py);
     const lit = glow[i] * 40;
-    if (pushed > most) most = pushed;
-    if (lit > most) most = lit;
+    if (pushed > most) {
+      most = pushed;
+    }
+    if (lit > most) {
+      most = lit;
+    }
   }
   const passes = Math.max(1, Math.round((SPREAD_CELL / air.cw) ** 2));
   const keepWind = wind ** (1 / passes);
@@ -290,6 +311,10 @@ export const seenAt = (air: Air, k: number): boolean =>
   air.dy[k] < -SEEN.push;
 
 function seenAnywhere(air: Air): boolean {
-  for (let k = 0; k < air.glow.length; k++) if (seenAt(air, k)) return true;
+  for (let k = 0; k < air.glow.length; k++) {
+    if (seenAt(air, k)) {
+      return true;
+    }
+  }
   return false;
 }

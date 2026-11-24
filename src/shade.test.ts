@@ -8,20 +8,25 @@ import { createSparkles, TINTS } from "./sparkle.ts";
 
 const CELL = { cw: 6, ch: 9.75 };
 const CLOUD = GLYPHS.indexOf("8");
-const sky = (density: number) => GLYPHS.indexOf(SKY_RAMP[Math.round(density * (SKY_RAMP.length - 1))]);
+const sky = (density: number) =>
+  GLYPHS.indexOf(SKY_RAMP[Math.round(density * (SKY_RAMP.length - 1))]);
 
 function fakeCells(density: number, cloudFrom = Number.POSITIVE_INFINITY) {
   const seen = { cells: 0, push: [0, 0] };
   const cells: SkyCells = {
-    at: () => {},
+    at: () => undefined,
     cell: (x0, _y0, _cw, _ch, _theme, out, _shown, pushX = 0, pushY = 0) => {
       seen.cells++;
-      if (pushX || pushY) seen.push = [pushX, pushY];
+      if (pushX || pushY) {
+        seen.push = [pushX, pushY];
+      }
       out[0] = 100;
       out[1] = 150;
       out[2] = 200;
       out[3] = density;
-      out[4] = out[5] = out[6] = 220;
+      out[4] = 220;
+      out[5] = 220;
+      out[6] = 220;
       out[7] = 0.3;
       return x0 >= cloudFrom ? CLOUD : OPEN_SKY;
     },
@@ -79,7 +84,9 @@ describe("shadeFrame", () => {
       assert.equal(frame.shown[0], sky(0.5));
     }
     assert.ok(alphas.size > 3);
-    for (const a of alphas) assert.ok(a >= 0.86 * 0.9 * 255 - 1 && a <= 255);
+    for (const a of alphas) {
+      assert.ok(a >= 0.86 * 0.9 * 255 - 1 && a <= 255);
+    }
   });
 
   test("draws clouds' glyphs as they are, in full", () => {
@@ -136,8 +143,11 @@ describe("faint rows", () => {
     let full = 0;
     const turn = [0, 0];
     for (let r = 0; r < grid.rows; r++) {
-      if (r < grid.faintRow) full += grid.cols;
-      else turn[r & 1] += grid.cols;
+      if (r < grid.faintRow) {
+        full += grid.cols;
+      } else {
+        turn[r & 1] += grid.cols;
+      }
     }
     assert.ok(grid.faintRow < grid.rows);
     assert.equal(asked(0), full + turn[0]);
@@ -173,7 +183,7 @@ describe("turns", () => {
     const { cells, seen } = fakeCells(0.5);
     shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
     air.stirred = true;
-    const k = 1 * grid.cols + 5;
+    const k = Number(grid.cols) + 5;
     air.glow[k] = 0.5;
     air.dx[k + 1] = 3;
     seen.cells = 0;
@@ -189,7 +199,7 @@ describe("wind", () => {
       const { grid, frame, air } = setup(400, 240);
       const { cells } = fakeCells(0.5);
       air.stirred = true;
-      const k = 1 * grid.cols + 5;
+      const k = Number(grid.cols) + 5;
       air.glow[k] = 0.4;
       shadeFrame(grid, cells, air, frame, 0, theme, EVERY_ROW);
       return {
@@ -200,7 +210,10 @@ describe("wind", () => {
     const day = at("light");
     assert.deepEqual(day.tile, [220, 220, 220], "the day's tiles stay as they are");
     const vice = at("vice");
-    assert.ok(vice.tile[0] < day.tile[0] - 20 && vice.tile[2] > vice.tile[0] + 25, `a cyan tile: ${vice.tile}`);
+    assert.ok(
+      vice.tile[0] < day.tile[0] - 20 && vice.tile[2] > vice.tile[0] + 25,
+      `a cyan tile: ${vice.tile}`,
+    );
     assert.ok(vice.glyph[0] < 30 && vice.glyph[1] > 175, `a cyan glyph: ${vice.glyph}`);
   });
 });
@@ -213,7 +226,7 @@ describe("night", () => {
     const { cells } = fakeCells(0.5);
     const sp = createSparkles(grid.cols, grid.rows);
     shadeFrame(grid, cells, air, frame, 0, "dark", EVERY_ROW, 3, 0, night, sp);
-    const k = 1 * grid.cols + 4;
+    const k = Number(grid.cols) + 4;
     sp.code[k] = GLYPHS.indexOf("*");
     sp.tint[k] = 1;
     sp.touched[k] = 1;
