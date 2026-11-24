@@ -7,7 +7,6 @@ const canvas = document.querySelector<HTMLCanvasElement>(".sky canvas");
 const still = document.querySelector<HTMLElement>(".sky-still");
 if (!box || !canvas || !still) throw new Error("demo: the sky's elements are missing");
 
-// The demo serves the package's assets folder at its base URL.
 const assets = import.meta.env.BASE_URL;
 const dark = window.matchMedia("(prefers-color-scheme: dark)");
 const resolve = (choice: ThemeChoice): SkyTheme =>

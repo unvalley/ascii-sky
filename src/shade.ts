@@ -1,12 +1,3 @@
-/**
- * A frame of the sky, worked out cell by cell into plain arrays, with no
- * canvas in sight (paint.ts draws them). Every cell asks the cells (see
- * cells.ts) what is there now: open sky, a glyph as dense as the
- * painting's blue, on a tile of it, breathing in strength on a clock of
- * its own under light that drifts across in slow bands; or a cloud, a
- * glyph on a tile of its shade. The air carries the clouds and lights the
- * sky it moves through.
- */
 import { type Air, seenAt } from "./air.ts";
 import { GLYPHS, OPEN_SKY, SKY_RAMP, type SkyCells, type SkyTheme } from "./cells.ts";
 import type { Grid } from "./grid.ts";
@@ -16,27 +7,15 @@ import { sine } from "./wave.ts";
 
 export type Theme = SkyTheme;
 
-/** What the wind is drawn in: a deeper blue on the light page, near white
- * on the dark, and the sea's cyan in a Vice City sunset. */
 const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], vice: [0, 190, 230] } as const;
-/** How strongly the wind colours what it passes: open sky's glyphs (1 is
- * by how much the air glows) and their tiles (0 leaves them). The
- * sunset's glyphs are dense and bright, so its wind colours them sooner
- * and its tiles too, or it hardly shows. */
 const WIND_TINT = {
   light: { glyph: 1, tile: 0 },
   dark: { glyph: 1, tile: 0 },
   vice: { glyph: 2.2, tile: 0.4 },
 } as const;
-/** Air that glows this much and moves this fast (page pixels a second)
- * shows as a streak along the wind over open sky. */
 const STREAK = { glow: 0.28, speed: 50 };
-/** Glow above which a level streak is a gust. */
 const GUSTY = 0.7;
-/** How much more one way than the other the wind blows to show as a level
- * or upright streak, not a slanted one. */
 const LEVEL = 2.4;
-/** Glow below which open sky is left unlit. */
 const UNLIT = 0.02;
 const glyph = (g: string) => GLYPHS.indexOf(g);
 const ALONG = glyph("-");
@@ -44,16 +23,8 @@ const GUST = glyph("~");
 const UP = glyph("|");
 const RISING = glyph("/");
 const FALLING = glyph("\\");
-/** Open sky's glyphs, by how much blue the painting has there. */
 const RAMP = [...SKY_RAMP].map(glyph);
-/** The clouds drift a pixel or so a frame, so each row is worked out one
- * frame in this many and still keeps up with them; the cells where the air
- * shows (see SEEN in air.ts) are worked out every frame, so the wind shows
- * smoothly. */
 export const TURNS = 3;
-/** Stars on the dark page: the share of open-sky cells that are stars,
- * their colour, the colour of the pointer's wind there, and whether they
- * sparkle (see night.ts and sparkle.ts). */
 export type Stars = Readonly<{
   stars: number;
   star: readonly number[];
@@ -61,37 +32,22 @@ export type Stars = Readonly<{
   sparkle?: boolean;
 }>;
 const NO_STARS: Stars = { stars: 0, star: [255, 255, 255], glow: GLOW.dark };
-/** A star's glyph: mostly small, a few bright. */
 const STAR = [".", ".", ".", ".", ".", ".", ".", "+", "+", "*"].map(glyph);
-/** Whether the still sky has a star at its column `sc`, row `r`, for a
- * night with this share of stars. */
 export const starAt = (sc: number, r: number, share: number): boolean =>
   hash(sc, r, 101) < share;
-/** What a cell shows before its first frame, so every cell is drawn then. */
 export const UNDRAWN = -2;
 
-/**
- * What a frame is worked out in, sized for one grid. `colours` and `tiles`
- * are a pixel a cell (RGBA), as the canvas takes them.
- */
 export type Frame = Readonly<{
-  /** Each cell's colour and how much of it shows, and its tile's. */
   colours: Uint8ClampedArray;
   tiles: Uint8ClampedArray;
-  /** The glyph each cell shows; -1 for none. */
   shown: Int16Array;
-  /** The cells whose glyph changed this frame, in order. */
   changed: Int32Array;
-  /** Each cell's breathing: its phase and its pace. */
   breath: Float32Array;
-  /** This frame's light, along the columns and down the rows. */
   bandAcross: Float64Array;
   bandDown: Float64Array;
-  /** Room for what a cell is (see SkyCells). */
   out: number[];
 }>;
 
-/** A frame for `grid`, drawing into `colours` and `tiles`. */
 export function createFrame(
   grid: Grid,
   colours: Uint8ClampedArray,
@@ -110,7 +66,6 @@ export function createFrame(
   };
 }
 
-/** Each cell's breathing, stable for the cell: a phase, and a pace. */
 export function breathing(cols: number, rows: number): Float32Array {
   const breath = new Float32Array(cols * rows * 2);
   for (let r = 0; r < rows; r++)
@@ -122,8 +77,6 @@ export function breathing(cols: number, rows: number): Float32Array {
   return breath;
 }
 
-/** The streak open sky shows in wind (vx, vy) glowing `glow`. y runs down
- * the page. */
 export function streak(vx: number, vy: number, glow: number): number {
   const ax = Math.abs(vx);
   const ay = Math.abs(vy);
@@ -132,16 +85,8 @@ export function streak(vx: number, vy: number, glow: number): number {
   return vx * vy < 0 ? RISING : FALLING;
 }
 
-
-/** Work out every row, faint ones too (see shadeFrame). */
 export const EVERY_ROW = -1;
 
-/**
- * The sky `t` seconds in, in `theme`, into `frame`. Faint rows (see Grid)
- * are worked out only when their parity (row & 1) is `half`, so each
- * every other frame, unless `half` is EVERY_ROW. Returns how many cells
- * changed glyph; they are the first in `frame.changed`.
- */
 export function shadeFrame(
   grid: Grid,
   cells: SkyCells,
@@ -150,12 +95,9 @@ export function shadeFrame(
   t: number,
   theme: Theme,
   half: number = EVERY_ROW,
-  /** Work out one row in `every`, those whose row % every is `turn`, and
-   * the cells the air is moving (see TURNS). */
   every = 1,
   turn = 0,
   night: Stars = NO_STARS,
-  /** Sparkles over the stars (dark page only). */
   sparkles: Sparkles | null = null,
 ): number {
   const { cols, rows, cw, ch, originX, skyX, faintRow } = grid;
@@ -176,7 +118,6 @@ export function shadeFrame(
   let n = 0;
   for (let r = 0; r < rows; r++) {
     if (r >= faintRow && half !== EVERY_ROW && (r & 1) !== half) continue;
-    // A row not due this frame: only its cells the air is moving.
     const offTurn = every > 1 && half !== EVERY_ROW && r % every !== turn;
     if (offTurn && !stirred && !sparks?.touchedRows[r]) continue;
     const y = r * ch;
@@ -199,15 +140,12 @@ export function shadeFrame(
       );
       let alpha = 1;
       if (code === OPEN_SKY) {
-        // A glyph as dense as the painting's blue, breathing, in the light.
         const breathe = 0.5 + 0.5 * sine(t * breath[k * 2 + 1] + breath[k * 2]);
         const band = 0.93 + 0.07 * bandAcross[c] * down;
         alpha = (0.9 + 0.1 * breathe) * band;
         out[7] *= band;
         code = RAMP[(out[3] * top + 0.5) | 0];
         if (stars > 0) {
-          // A star, where the still sky has one: it stays with the sky
-          // whatever the page's width, and twinkles.
           const sc = Math.floor((originX + c * cw + skyX) / cw);
           if (starAt(sc, r, stars)) {
             code = STAR[(hash(sc, r, 103) * STAR.length) | 0];
@@ -219,7 +157,6 @@ export function shadeFrame(
           }
         }
         if (sparks) {
-          // A sparkle over the open sky.
           const spark = sparks.code[k];
           sparks.touched[k] = 0;
           if (spark >= 0) {
@@ -247,7 +184,6 @@ export function shadeFrame(
       colours[o] = out[0];
       colours[o + 1] = out[1];
       colours[o + 2] = out[2];
-      // (x + 0.5) | 0 rounds as Math.round does for x ≥ 0, several times faster.
       colours[o + 3] = code < 0 ? 0 : (alpha * 255 + 0.5) | 0;
       tiles[o] = out[4];
       tiles[o + 1] = out[5];

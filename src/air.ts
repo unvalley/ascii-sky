@@ -1,96 +1,44 @@
-/**
- * The air over the sky, a value a cell: the wind a visitor's pointer stirs
- * up. Moving the pointer through the sky pushes the air along with it; the
- * push spreads to the cells around and dies away. A click or tap sends a
- * gust out from where it lands: a front of wind that runs outwards, slowing
- * as it spreads, stronger some ways than others, and leaves the air it
- * passed moving and lit behind it. The air carries clouds with
- * it: each cell keeps how far its air has carried them (`dx`, `dy`, page
- * pixels), which slowly springs back, so a pushed cloud drifts back into
- * shape. `glow` is how much the air is moving, for the sky to light.
- *
- * The air is plain data and these functions change it in place: it is
- * stepped up to four times a frame over every cell, so nothing here
- * allocates once the air is made.
- */
-
 import { hash } from "./hash.ts";
 
-/** How long the parts of the air take to die away, in seconds. */
 const WIND_LIFE = 0.45;
 const GLOW_LIFE = 0.7;
-/** Pushed clouds drift back over about this long. */
 const SPRING = 2.6;
-/** How much of the pointer's speed the air takes on, and the most it can. */
 const DRAG = 0.55;
 const MOST_SPEED = 900;
 export const MOST_PUSH = 70;
-/** The pointer's speed, in page pixels a second, that lights the air fully. */
 const BRIGHT_SPEED = 1400;
-/** How far round the pointer it pushes the air, in page pixels: as far
- * whatever the cells' size. */
 const REACH = 28;
-/**
- * A gust: how far its front runs (page pixels) and for how long (seconds),
- * how thick the front is either side (page pixels), the speed it gives the
- * air at first (page pixels a second) and the glow it adds a step, both
- * falling as it spreads, and how many stronger and weaker ways it blows.
- */
 const GUST = { reach: 128, life: 0.8, band: 11, speed: 320, glow: 0.45, lanes: 9 };
-/** The cell width the air's spreading was set for, in page pixels: on
- * smaller cells it spreads more often a step, so it reaches as far. */
 const SPREAD_CELL = 8;
-/** Behind a gust's front the air settles at once, so what shows is the
- * front running out, not a disc of wind: what of its wind and glow the
- * air keeps a step. */
 const SETTLE = { wind: 0.7, glow: 0.82 };
-/** Gusts blowing at once; another click takes the oldest one's place. */
 const MOST_GUSTS = 4;
-/** A gust's place in `gusts`: where it started, how old it is (seconds,
- * below 0 when the place is free), and how hard it blows each way round
- * (GUST.lanes values, see lanesOf). */
 const GUST_X = 0;
 const GUST_Y = 1;
 const GUST_AGE = 2;
 const GUST_LANES = 3;
 export const GUST_SIZE = GUST_LANES + GUST.lanes;
-/** The most glow a cell holds. */
 const MOST_GLOW = 1.2;
-/** Below this much movement anywhere, the air is still. */
 const STILL = 0.05;
-/** Air that lights a cell at all, or carries a cloud over it by this many
- * page pixels, shows: the sky works such cells out every frame
- * (shade.ts), and draws at the full rate while there are any (engine.ts). */
 export const SEEN = { glow: 0.02, push: 2 };
 
 export type Air = {
   readonly cols: number;
   readonly rows: number;
-  /** A cell in page pixels. */
   readonly cw: number;
   readonly ch: number;
-  /** The wind, page pixels a second. */
   readonly vx: Float32Array;
   readonly vy: Float32Array;
-  /** How far the air has carried the clouds, page pixels. */
   readonly dx: Float32Array;
   readonly dy: Float32Array;
   readonly glow: Float32Array;
-  /** Room to spread a field into. */
   readonly spare: Float32Array;
-  /** Where the pointer was last, and when (ms), while it is over the sky. */
   readonly pointer: { x: number; y: number; t: number; on: boolean };
-  /** The gusts blowing (see GUST_SIZE), and how many there have been. */
   readonly gusts: Float64Array;
   puffs: number;
-  /** Whether any air moves, so a still sky skips the work. */
   stirred: boolean;
-  /** Whether it moves any cell enough to show (see SEEN), or a gust
-   * blows: until it settles, the sky draws at its full rate. */
   lively: boolean;
 };
 
-/** Still air over `cols` × `rows` cells of `cw` × `ch` page pixels. */
 export function createAir(cols: number, rows: number, cw: number, ch: number): Air {
   const n = cols * rows;
   return {
@@ -112,20 +60,12 @@ export function createAir(cols: number, rows: number, cw: number, ch: number): A
   };
 }
 
-/**
- * The air for a grid of this size: the same air, moving as it was, when
- * only the cells' size changes; still air when the grid does.
- */
 export function fitAir(air: Air, cols: number, rows: number, cw: number, ch: number): Air {
   if (cols === air.cols && rows === air.rows)
     return cw === air.cw && ch === air.ch ? air : { ...air, cw, ch };
   return { ...createAir(cols, rows, cw, ch), pointer: air.pointer };
 }
 
-/**
- * Visits each cell within `reach` cells of page point (x, y) with its
- * weight, 1 at the middle, and marks the air as moving.
- */
 function around(
   air: Air,
   x: number,
@@ -149,7 +89,6 @@ function around(
   air.lively = true;
 }
 
-/** The pointer is over the sky at page point (x, y), at `t` ms. */
 export function blow(air: Air, x: number, y: number, t: number): void {
   const last = air.pointer;
   if (last.on && t > last.t) {
@@ -175,15 +114,12 @@ export function blow(air: Air, x: number, y: number, t: number): void {
   last.on = true;
 }
 
-/** The pointer has left the sky. */
 export function calm(air: Air): void {
   air.pointer.on = false;
 }
 
-/** A gust of wind sent out from page point (x, y) (see GUST). */
 export function puff(air: Air, x: number, y: number): void {
   const { gusts } = air;
-  // A free place, or the oldest gust's.
   let at = 0;
   for (let g = 0; g < MOST_GUSTS; g++) {
     const age = gusts[g * GUST_SIZE + GUST_AGE];
@@ -207,12 +143,6 @@ const smooth = (a: number, b: number, t: number) => {
   return x * x * (3 - 2 * x);
 };
 
-/**
- * How hard gust `seed` blows each way round, GUST.lanes values from 0 to
- * 1 into `out` from `at`: its strongest way all of it, its weakest none,
- * so every gust comes out in a few streams with calm between, as a gust
- * does, not as a ring.
- */
 export function lanesOf(seed: number, out: Float64Array, at: number): void {
   let least = 1;
   let most = 0;
@@ -226,8 +156,6 @@ export function lanesOf(seed: number, out: Float64Array, at: number): void {
     out[at + k] = smooth(0.25, 0.75, (out[at + k] - least) / (most - least || 1));
 }
 
-/** How hard the gust whose lanes are in `lanes` from `at` blows towards
- * `angle` (radians), smoothly between its lanes. */
 export function laneAt(lanes: Float64Array, at: number, angle: number): number {
   const p = (angle / (Math.PI * 2) + 1) * GUST.lanes;
   const i = Math.floor(p);
@@ -237,16 +165,12 @@ export function laneAt(lanes: Float64Array, at: number, angle: number): number {
   return a + (b - a) * f * f * (3 - 2 * f);
 }
 
-/** Blows gust `g` at its age: its front, a ring as far out as it has run,
- * pushes the air there outwards and lights it, and the air it has passed
- * settles. */
 function blowFront(air: Air, g: number) {
   const { cols, rows, cw, ch, vx, vy, glow, gusts } = air;
   const o = g * GUST_SIZE;
   const gx = gusts[o + GUST_X];
   const gy = gusts[o + GUST_Y];
   const fade = 1 - gusts[o + GUST_AGE] / GUST.life;
-  // Fast at first, slowing as it spreads.
   const radius = GUST.reach * (1 - fade * fade);
   const band = GUST.band;
   const speed = GUST.speed * fade;
@@ -275,7 +199,6 @@ function blowFront(air: Air, g: number) {
     }
 }
 
-/** Blows every gust on by `dt` seconds; whether any still blows. */
 function blowGusts(air: Air, dt: number): boolean {
   const { gusts } = air;
   let blowing = false;
@@ -290,12 +213,6 @@ function blowGusts(air: Air, dt: number): boolean {
   return blowing;
 }
 
-/**
- * Blurs `field` into its four neighbours by `share`, then scales it by
- * `keep`; past the edges a cell counts itself. The first and last column
- * are done apart, so the cells between need no edge checks. (A grid has at
- * least two columns.)
- */
 function spread(air: Air, field: Float32Array, share: number, keep: number) {
   const { cols, rows, spare } = air;
   const self = 1 - share;
@@ -304,7 +221,6 @@ function spread(air: Air, field: Float32Array, share: number, keep: number) {
   for (let r = 0; r < rows; r++) {
     const row = r * cols;
     const end = row + last;
-    // Above the top row and below the bottom one, a cell is its own neighbour.
     const up = r > 0 ? -cols : 0;
     const dn = r < rows - 1 ? cols : 0;
     let v = field[row];
@@ -322,7 +238,6 @@ function spread(air: Air, field: Float32Array, share: number, keep: number) {
   field.set(spare);
 }
 
-/** Moves the air on by `dt` seconds. */
 export function stepAir(air: Air, dt: number): void {
   if (!air.stirred) return;
   const blowing = blowGusts(air, dt);
@@ -334,7 +249,6 @@ export function stepAir(air: Air, dt: number): void {
   for (let i = 0; i < dx.length; i++) {
     let px = (dx[i] + vx[i] * dt) * spring;
     let py = (dy[i] + vy[i] * dt) * spring;
-    // Not Math.hypot, which is several times slower; these never overflow.
     const d = Math.sqrt(px * px + py * py);
     if (d > MOST_PUSH) {
       px *= MOST_PUSH / d;
@@ -347,9 +261,6 @@ export function stepAir(air: Air, dt: number): void {
     if (pushed > most) most = pushed;
     if (lit > most) most = lit;
   }
-  // Spreading goes a cell a pass, as far as the square root of the passes:
-  // on cells smaller than SPREAD_CELL, more passes, so the air spreads as
-  // far in page pixels; each pass keeps its share of what the step keeps.
   const passes = Math.max(1, Math.round((SPREAD_CELL / air.cw) ** 2));
   const keepWind = wind ** (1 / passes);
   const keepShine = shine ** (1 / passes);
@@ -371,7 +282,6 @@ export function stepAir(air: Air, dt: number): void {
   air.lively = blowing || (air.stirred && seenAnywhere(air));
 }
 
-/** Whether the air at cell `k` shows (see SEEN). */
 export const seenAt = (air: Air, k: number): boolean =>
   air.glow[k] > SEEN.glow ||
   air.dx[k] > SEEN.push ||

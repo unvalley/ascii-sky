@@ -1,30 +1,13 @@
-/**
- * The glyphs the sky is drawn with, each drawn once in white on a strip of
- * cells, to be stamped from; and the glyphs' shapes, for picking them by
- * shape (see cells.ts).
- */
 import { GLYPHS, measureGlyph, normaliseShapes } from "./cells.ts";
 
 const FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
-/** How much larger glyphs are drawn to measure their shapes. */
 const MEASURE = 8;
-/** The gap along the top and left of every cell (see paint.ts), and the
- * room kept clear around the glyphs inside it, in page pixels. */
 const GAP = 1;
 const PAD = 0.25;
-/** The size the font's ink is measured at, to fit its glyphs. */
 const PROBE = 100;
 
-/** How far the glyphs' ink reaches from where they are drawn: up and down
- * from the baseline, left and right from the pen, at PROBE px. */
 export type Ink = Readonly<{ up: number; down: number; left: number; right: number }>;
 
-/**
- * The font size and the pen (x, baseline y) that put every glyph wholly
- * inside its tile, clear of the gap, and centred in the room left: so no
- * glyph runs over the lines between tiles, and every glyph sits in the
- * middle of its tile. In page pixels, in a cell `cw` × `ch`.
- */
 export function fitGlyphs(ink: Ink, cw: number, ch: number) {
   const roomW = cw - GAP - 2 * PAD;
   const roomH = ch - GAP - 2 * PAD;
@@ -38,7 +21,6 @@ export function fitGlyphs(ink: Ink, cw: number, ch: number) {
   };
 }
 
-/** The ink all the glyphs reach together, in `a`'s font at PROBE px. */
 function measureInk(a: CanvasRenderingContext2D): Ink {
   a.font = `bold ${PROBE}px ${FONT}`;
   let up = 0;
@@ -57,15 +39,11 @@ function measureInk(a: CanvasRenderingContext2D): Ink {
 
 export type Atlas = Readonly<{
   canvas: HTMLCanvasElement;
-  /** A cell of the strip, in its pixels. */
   gw: number;
   gh: number;
   ctx: CanvasRenderingContext2D | null;
 }>;
 
-/** Each glyph in white, a cell each, for cells `cw` × `ch` page pixels
- * drawn `scale` device pixels a page pixel: inside its tile and in its
- * middle (fitGlyphs), its pen on whole device pixels so it draws sharp. */
 export function drawAtlas(cw: number, ch: number, scale: number): Atlas {
   const gw = Math.ceil(cw * scale);
   const gh = Math.ceil(ch * scale);
@@ -92,8 +70,6 @@ export function drawAtlas(cw: number, ch: number, scale: number): Atlas {
   return { canvas, gw, gh, ctx: a };
 }
 
-/** The glyphs' shapes in this font, in cells `cw` × `ch`, for picking them
- * by shape (see cells.ts). */
 export function measureShapes(cw: number, ch: number): Float32Array | null {
   const big = drawAtlas(cw, ch, MEASURE);
   if (!big.ctx) return null;

@@ -1,25 +1,8 @@
-/**
- * The still sky's colours at night, made with the still sky
- * (scripts/sky-convert.mjs), so the page reads them as they are: the
- * painting's blue taken down to a navy, deeper where the painting's blue
- * is denser (the night has no clouds and has stars, see night.ts).
- */
 import { SKY_RAMP } from "./cells.ts";
 import { fromOklab, oklab } from "./oklab.ts";
 
-/** The night: open sky's lightness (OKLab) where the painting's blue is
- * lightest and densest, how much of its colour it keeps, and how far its
- * hue turns (degrees; more is towards violet). The glyphs are this light;
- * their tiles show little of it (THEMES.dark's wash), so the glyphs stand
- * clear of them and read sharp. */
 const NIGHT = { light: 0.41, dense: 0.29, chroma: 0.75, hue: 14 };
 
-/**
- * The still sky's colours on the dark page (a pixel a cell, `channels`
- * bytes each, changed in place) taken to night: each cell's blue turned
- * and paled, and its lightness by how dense the painting's blue is there
- * (`text`, a line of SKY_RAMP glyphs a row).
- */
 export function toNight(
   pixels: Uint8Array | Uint8ClampedArray,
   channels: number,

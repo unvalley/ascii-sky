@@ -28,7 +28,6 @@ describe("hash", () => {
       if (Math.abs(hash(x, 0, 1) - hash(x + 1, 0, 1)) < 0.005) same++;
       if (Math.abs(hash(x, 0, 23) - hash(x, 0, 37)) < 0.005) same++;
     }
-    // Unrelated numbers come this close in 1 pair in 100: about 20 here.
     assert.ok(same < 45, `${same} near pairs`);
   });
 });

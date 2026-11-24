@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { fitGlyphs } from "./atlas.ts";
 
-// Roughly a bold monospace font's reach at 100 px: tall brackets, 0.6 em wide.
 const INK = { up: 76, down: 22, left: 2, right: 58 };
 const GAP = 1;
 const PAD = 0.25;

@@ -1,5 +1,3 @@
-/** Colours to and from OKLab (Björn Ottosson), on 0 .. 255 sRGB. */
-
 const toLinear = (v: number) => {
   const c = v / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;

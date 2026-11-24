@@ -1,9 +1,3 @@
-// How long the sky takes to work a frame out (src/shade.ts) and
-// to move its air, with no browser: the real assets, a 1440 px wide page
-// at 2x, a tablet and a phone, its top 240 or 360 page pixels at full
-// strength and fainter below, as on unvalley.me. Drawing
-// on the canvas is not counted.
-//   node scripts/bench.mjs
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { blow, createAir, puff, stepAir } from "../src/air.ts";
@@ -36,7 +30,6 @@ const cells = skyCells({
   },
   near,
   far,
-  // The glyphs' real shapes need a canvas; any shapes cost the same.
   shapes: new Float32Array(GLYPHS.length * 6).fill(0.5),
 });
 

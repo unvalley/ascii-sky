@@ -1,20 +1,6 @@
-/**
- * Vice: the sky as a Vice City sunset, for the "vice" theme. Its colours
- * run down the sky from violet through pink to orange, a little deeper
- * where the painting's blue is denser, so its brushwork still shows. Its
- * clouds are fewer and lit by the low sun (THEMES.vice in cells.ts), and
- * the pointer's wind is the sea's teal (shade.ts).
- *
- * The colours are worked out in the browser from the still sky's glyphs,
- * so the theme needs no file of its own; until the live sky is drawn the
- * page can show the same gradient (viceGradient, see still.ts).
- */
 import { SKY_RAMP } from "./cells.ts";
 import { fromOklab, oklab } from "./oklab.ts";
 
-/** The sunset, top down: page pixels from the top of the sky, and the
- * colour there. A sky 240 page pixels tall ends in pink, one 360 tall
- * in orange; further down it turns gold. */
 export const VICE_STOPS: readonly (readonly [number, string])[] = [
   [0, "#5a4cc2"],
   [100, "#9551c6"],
@@ -24,8 +10,6 @@ export const VICE_STOPS: readonly (readonly [number, string])[] = [
   [440, "#ffbb4a"],
 ];
 
-/** How much darker (OKLab lightness) a cell is where the painting's blue
- * is densest than where it is lightest. */
 const DEPTH = 0.1;
 
 const rgbOf = (hex: string) =>
@@ -35,7 +19,6 @@ const rgbOf = (hex: string) =>
     number,
   ];
 
-/** The sunset's colour in OKLab `y` page pixels down. */
 function sunsetAt(y: number): [number, number, number] {
   const last = VICE_STOPS.length - 1;
   if (y <= VICE_STOPS[0][0]) return oklab(...rgbOf(VICE_STOPS[0][1]));
@@ -50,12 +33,6 @@ function sunsetAt(y: number): [number, number, number] {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-/**
- * The still sky's colours for the vice theme, a pixel a cell (RGBA), from
- * its glyphs (`text`, a line of SKY_RAMP glyphs a row) on cells `ch` page
- * pixels tall: the sunset at each row's middle, deeper by how dense the
- * painting's blue is there.
- */
 export function viceColours(
   columns: number,
   rows: number,
@@ -63,7 +40,6 @@ export function viceColours(
   text: string,
 ): Uint8ClampedArray {
   const out = new Uint8ClampedArray(columns * rows * 4);
-  // A row has one colour for each glyph of the ramp: work those out once.
   const levels = SKY_RAMP.length;
   const row = new Uint8ClampedArray(levels * 3);
   const lines = text.split("\n");
@@ -89,7 +65,5 @@ export function viceColours(
   return out;
 }
 
-/** The sunset as a CSS gradient down the sky, for the page to show until
- * the live sky is drawn. */
 export const viceGradient = () =>
   `linear-gradient(to bottom, ${VICE_STOPS.map(([y, c]) => `${c} ${y}px`).join(", ")})`;

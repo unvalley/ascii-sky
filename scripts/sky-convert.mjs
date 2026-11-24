@@ -1,10 +1,3 @@
-// The still sky's converter, for the painted sky: paper stays
-// blank, every inked cell is sorted into a part by its colour (cerulean
-// wash, lavender shade, sun) and shaded over that part's own range, a
-// glyph per cell from ".:+*ox%#@". Colours are each cell's own, deepened
-// a little for the light page and lightened for the dark one, as colour
-// maps (a pixel per cell).
-//   node sky-convert.mjs <sky.png> <outDir>
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -68,7 +61,6 @@ function hslToRgb([h, s, l]) {
   return [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((v) => Math.round(v * 255));
 }
 const chromaOf = (c) => Math.max(...c) - Math.min(...c);
-// Ink: anything off the paper, by darkness or colour.
 const isInk = (c) => lum(c) < env("INK_L", 0.94) || chromaOf(c) >= env("INK_CHROMA", 14);
 
 const cells = [];
@@ -91,7 +83,6 @@ for (let r = 0; r < ROWS; r++)
       continue;
     }
     const mean = sum.map((v) => v / n);
-    // The paint's direction: the structure tensor over the cell.
     let jxx = 0;
     let jyy = 0;
     let jxy = 0;
@@ -119,15 +110,12 @@ function partOf({ mean }) {
   return "sky";
 }
 const PARTS = {
-  // [ramp, lightest index, darkest index]
   sky: [RAMP, env("SKY_LO", 0), env("SKY_HI", 8)],
   shade: [RAMP, env("SHADE_LO", 0), env("SHADE_HI", 5)],
   sun: [".:+*o", 0, 4],
 };
 const live = cells.filter(Boolean);
 for (const cell of live) cell.part = partOf(cell);
-// Local darkness: a cell against the blurred sky around it, so brush
-// strokes show as glyphs while the broad gradient is left to colour.
 const LOCAL = env("LOCAL", 0);
 if (LOCAL) {
   const RX = env("LOCAL_RX", 7);
@@ -144,7 +132,7 @@ if (LOCAL) {
         w += k;
       }
     const around = w ? s / w : lum(cell.mean);
-    cell.local = around - lum(cell.mean); // darker than around is positive
+    cell.local = around - lum(cell.mean);
     cell.broad = 1 - around;
   }
 }
@@ -163,18 +151,14 @@ for (const [name, [ramp, lo, hi]] of Object.entries(PARTS)) {
     let i = Math.round(lo + t ** env("GAMMA", 1) * (hi - lo));
     if (cell.coverage < 0.45) i = Math.min(i, lo + 1);
     cell.glyph = ramp[i];
-    // Brush strokes: where the paint has a clear direction, a line glyph
-    // along it instead.
     if (name === "sky" && env("STROKES", 0) && cell.coherence > env("COHERENT", 0.55) && cell.trace > env("TRACE", 0.004)) {
       let a = cell.along % 180;
       if (a < 0) a += 180;
-      // Screen y grows downwards: a stroke rising to the right is "/".
       cell.glyph = a < 20 || a >= 160 ? "-" : a < 70 ? "\\" : a < 110 ? "|" : "/";
     }
   }
 }
 
-// OKLab, so lightness and colourfulness can be set apart.
 const toLinear = (v) => {
   const c = v / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -196,10 +180,6 @@ function fromLab([L, a, b]) {
   const s2 = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
   return [fromLinear(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s2), fromLinear(-1.2684380046 * l + 2.6097574011 * m - 0.3413193263 * s2), fromLinear(-0.0041960863 * l - 0.7034186807 * m + 1.707614701 * s2)];
 }
-// Thin glyphs cover a third of their cell at most, so on white the sky's
-// blue has to be deeper and richer than the paint's to look as vivid;
-// clouds stay pale. On black, the blue is lifted and the clouds bright.
-// *_SKY_HUE turns the blue (degrees; less is towards cyan).
 const turn = (a, b, degrees) => {
   const t = (degrees * Math.PI) / 180;
   return [a * Math.cos(t) - b * Math.sin(t), a * Math.sin(t) + b * Math.cos(t)];
@@ -214,8 +194,6 @@ const grade = (rgb, part, mode) => {
   const [a, b] = turn(a0, b0, env("DARK_SKY_HUE", 0));
   return fromLab([Math.max(L, env("DARK_SKY_L", 0.6)), a * env("DARK_SKY_C", 1.25), b * env("DARK_SKY_C", 1.25)]);
 };
-// Clouds: blue-grey from their light into their shadow, never the cream
-// of the paint, which turns beige once deepened.
 const CLOUD = {
   light: ["#c3d2e8", "#9db3d6", "#7690c2", "#5a76ae"],
   dark: ["#ffffff", "#e6eefa", "#c2d1ea", "#93a8cf"],
@@ -232,9 +210,6 @@ const lightVariant = (rgb, part) => grade(rgb, part, "light");
 const darkVariant = (rgb, part) => grade(rgb, part, "dark");
 const PAGE = { light: [250, 250, 250], dark: [23, 23, 23] };
 const maps = { light: Buffer.alloc(COLS * ROWS * 3), dark: Buffer.alloc(COLS * ROWS * 3) };
-// Where the sky gives way (unless NOFADE): behind a text column below a
-// header, to the sides and towards the bottom, glyphs lighten, thin out
-// and fade.
 const COLUMN = 336;
 const HEADER = 96;
 const smooth = (a, b, t) => {
@@ -257,17 +232,12 @@ for (let r = 0; r < ROWS; r++) {
     const cell = cells[r * COLS + c];
     const x = (c + 0.5) * CW - W / 2;
     const y = (r + 0.5) * CH;
-    // The text column is kept nearly clear, the header a little less so,
-    // with a wide soft edge, so the sky frames the text instead of
-    // running under it.
     const side = smooth(COLUMN - env("EDGE_IN", 10), COLUMN + env("EDGE_OUT", 110), Math.abs(x));
-    // The header band's lower edge wanders, so it ends like weather, not a ruler.
     const wander = (Math.sin(x / 47) * 0.5 + Math.sin(x / 113 + 1.3) * 0.35 + Math.sin(x / 23 + 0.4) * 0.15) * env("WANDER", 12);
     const header = 1 - smooth(HEADER - 34 + wander, HEADER + 4 + wander, y);
     const behind = env("BEHIND", 0.1) + (env("HEADER_KEEP", 0.4) - env("BEHIND", 0.1)) * header;
     const away = side;
     const fade = (1 - smooth(env("FADE_FROM", 0.5) * ROWS * CH, ROWS * CH, y)) * (1 - smooth(env("SIDE", 960) - 140, env("SIDE", 960), Math.abs(x)));
-    // With NOFADE the page fades it with CSS masks instead, so it can move.
     const keep = env("NOFADE", 0) ? 1 : fade * (behind + (1 - behind) * away);
     let glyph = cell ? cell.glyph : " ";
     if (cell && keep < 1) {
@@ -288,7 +258,6 @@ for (let r = 0; r < ROWS; r++) {
   art.push(line.trimEnd());
 }
 writeFileSync(path.join(outDir, "sky.txt"), art.join("\n"));
-// The dark page's sky is a night's (src/grade.ts).
 const { toNight } = await import(new URL("../src/grade.ts", import.meta.url).href);
 toNight(maps.dark, 3, COLS, ROWS, art.join("\n"));
 for (const m of ["light", "dark"]) await sharp(maps[m], { raw: { width: COLS, height: ROWS, channels: 3 } }).png().toFile(path.join(outDir, `sky-${m}.png`));

@@ -17,7 +17,6 @@ import {
   WIND,
 } from "./cells.ts";
 
-/** A cloud layer that is all cloud (green 255) of one shade (red), or none. */
 function layer(cloud: number, shade = 0): CloudLayer {
   const width = 64;
   const height = 64;
@@ -45,7 +44,6 @@ function sky(near: CloudLayer, far = layer(0)) {
     },
     near,
     far,
-    // Every glyph the same shape: shapes don't matter here.
     shapes: new Float32Array(GLYPHS.length * 6).fill(0.5),
   });
 }
@@ -96,7 +94,6 @@ describe("vice", () => {
 });
 
 describe("bigClouds", () => {
-  /** A layer with a square cloud of `side` layer pixels at (x, y) for each of `squares`. */
   function clouds(...squares: [number, number, number][]): CloudLayer {
     const width = 64;
     const height = 32;
@@ -113,7 +110,6 @@ describe("bigClouds", () => {
   const cloudAt = (l: CloudLayer, x: number, y: number) => l.pixels[(y * l.width + x) * 4 + 1];
 
   test("leaves out clouds smaller than asked and keeps the rest as they were", () => {
-    // 3 × 3 layer pixels is 36 page pixels square; 10 × 10 is 400.
     const layer = clouds([2, 2, 3], [20, 10, 10]);
     const big = bigClouds(layer, 100);
     assert.equal(cloudAt(big, 3, 3), 0);
@@ -124,7 +120,6 @@ describe("bigClouds", () => {
   });
 
   test("counts a cloud across the layer's seam as one", () => {
-    // 6 + 4 columns, either side of the seam: 10 × 10 in all.
     const big = bigClouds(clouds([58, 5, 10]), 300);
     assert.equal(cloudAt(big, 60, 8), 255);
     assert.equal(cloudAt(big, 2, 8), 255);
@@ -173,7 +168,6 @@ describe("glyph shapes", () => {
 });
 
 describe("reach", () => {
-  /** The most cloud within rx × ry of (i, j), one pixel at a time. */
   function slowly(pixels: Uint8ClampedArray, lw: number, lh: number, rx: number, ry: number) {
     const out = new Uint8Array(lw * lh);
     for (let j = 0; j < lh; j++)
@@ -203,16 +197,13 @@ describe("reach", () => {
       [40, 30, 6, 6],
       [29, 31, 9, 4],
       [16, 9, 20, 12],
-      // Wider than a band, so bands meet and wrap.
       [300, 20, 24, 15],
       [257, 12, 6, 6],
     ]) {
       const pixels = new Uint8ClampedArray(lw * lh * 4);
-      // Sparse cloud, so the windows matter.
       for (let i = 0; i < lw * lh; i++) pixels[i * 4 + 1] = rand() < 0.08 ? 1 + ((rand() * 254) | 0) : 0;
       const want = slowly(pixels, lw, lh, rx, ry);
       assert.deepEqual(reach(pixels, lw, lh, rx, ry), want, `${lw}x${lh} r ${rx},${ry}`);
-      // Looked at in any order, a pixel at a time, it is the same.
       const lazily = reachLazily({ pixels, width: lw, height: lh }, rx, ry);
       const order = Array.from({ length: lw * lh }, (_, k) => k).sort(() => rand() - 0.5);
       for (const k of order) assert.equal(reachAt(lazily, k % lw, Math.floor(k / lw), lw), want[k]);

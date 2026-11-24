@@ -18,7 +18,6 @@ import {
 } from "./clock.ts";
 import { TURNS } from "./shade.ts";
 
-/** How many of a second's frames at `hz` are drawn at `rate`. */
 function drawnIn(hz: number, rate: number, seconds = 1) {
   let drawnAt = Number.NEGATIVE_INFINITY;
   let drawn = 0;
@@ -59,7 +58,6 @@ describe("beat", () => {
 
   test("starts a new beat after a stall instead of catching up", () => {
     assert.equal(beat(1000, FULL_RATE, 1500), 1500);
-    // The frame after the stall is a whole beat later, not straight away.
     assert.ok(Number.isNaN(beat(1500, FULL_RATE, 1508)));
   });
 });

@@ -1,10 +1,3 @@
-// Splits the tiling sky into two layers: the sky without its clouds (the
-// clouds filled in with the blue around them, then given back the
-// brushwork of clear sky elsewhere), and the clouds alone, as how much
-// of each pixel is cloud and how shaded it is. The clouds tile with the
-// sky's period, so they can drift and loop; the still sky is widened to
-// 2400 page pixels by repeating it.
-//   node cloud-layers.mjs <tile.png> <outDir>
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -24,8 +17,6 @@ const smooth = (a, b, t) => {
 const lum = (i) => (0.2126 * img[i * 3] + 0.7152 * img[i * 3 + 1] + 0.0722 * img[i * 3 + 2]) / 255;
 const chroma = (i) => (Math.max(img[i * 3], img[i * 3 + 1], img[i * 3 + 2]) - Math.min(img[i * 3], img[i * 3 + 1], img[i * 3 + 2])) / 255;
 
-// Cloud: pale and grey rather than blue. Shade: how far below the
-// cloud's brightest it is.
 const alpha = new Float32Array(P * H);
 const shade = new Float32Array(P * H);
 for (let i = 0; i < P * H; i++) {
@@ -34,7 +25,6 @@ for (let i = 0; i < P * H; i++) {
   alpha[i] = smooth(env("A_LO", 0.62), env("A_HI", 0.8), L) * (1 - smooth(env("C_LO", 0.2), env("C_HI", 0.42), ch));
   shade[i] = Math.min(1, Math.max(0, (0.97 - L) / 0.3));
 }
-// Soften the cloud's edge a touch, wrapping round the period.
 const blurX = (src, r) => {
   const out = new Float32Array(P * H);
   for (let y = 0; y < H; y++)
@@ -63,7 +53,6 @@ const blurY = (src, r) => {
 };
 const softAlpha = blurY(blurX(alpha, 2), 2);
 
-// The cloud layer at half size: red is shade, alpha is cloud.
 const HW = P / 2;
 const HH = Math.round(H / 2);
 const layer = Buffer.alloc(HW * HH * 4);
@@ -88,10 +77,6 @@ for (let y = 0; y < HH; y++)
   }
 await sharp(layer, { raw: { width: HW, height: HH, channels: 4 } }).png().toFile(path.join(outDir, "clouds.png"));
 
-// The sky without clouds: fill where there is cloud from the sky around
-// it (push-pull: average down to coarse levels with weights, then fill
-// back up), then add back fine brushwork taken from clear sky elsewhere.
-// Where to replace: any trace of cloud, grown by a few pixels.
 const raw = new Float32Array(P * H);
 for (let i = 0; i < P * H; i++) raw[i] = smooth(0.02, 0.2, softAlpha[i]);
 const hole = blurY(blurX(raw.map((v) => (v > 0.02 ? 1 : 0)), 6), 6).map((v) => Math.min(1, v * 2.5));
@@ -118,7 +103,6 @@ function pushPull(values, weights, w, h) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
       const k = Math.min(1, weights[i]);
-      // Bilinear from the coarser level, so the fill has no blocks.
       const fx = (x + 0.5) / 2 - 0.5;
       const fy = (y + 0.5) / 2 - 0.5;
       const x0 = Math.floor(fx);
@@ -132,8 +116,6 @@ function pushPull(values, weights, w, h) {
     }
   return out;
 }
-// Filled across three periods side by side and the middle one kept, so
-// the fill wraps like the sky does.
 const P3 = P * 3;
 const vals = new Float32Array(P3 * H * 3);
 const wts = new Float32Array(P3 * H);
@@ -148,7 +130,6 @@ const filled3 = pushPull(vals, wts, P3, H);
 const base = new Float32Array(P * H * 3);
 for (let y = 0; y < H; y++)
   for (let x = 0; x < P; x++) for (let c = 0; c < 3; c++) base[(y * P + x) * 3 + c] = filled3[(y * P3 + x + P) * 3 + c];
-// Fine brushwork: the image less its blur, from a donor spot of clear sky.
 const blurC = (c, r) => {
   const ch = new Float32Array(P * H);
   for (let i = 0; i < P * H; i++) ch[i] = img[i * 3 + c];
@@ -175,7 +156,6 @@ for (let y = 0; y < H; y++)
       sky[i * 3 + c] = Math.round(Math.min(255, Math.max(0, img[i * 3 + c] * (1 - h) + filled * h)));
     }
   }
-// Widen to 2400 by repeating the period, centred.
 const W = 2400;
 const wide = Buffer.alloc(W * H * 3);
 const shift = ((P - ((W - P) / 2)) % P + P) % P;

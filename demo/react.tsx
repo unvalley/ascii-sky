@@ -1,4 +1,3 @@
-// The React component on a page of its own: `pnpm dev`, then /react.html.
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { SkyTheme } from "../src/index.ts";

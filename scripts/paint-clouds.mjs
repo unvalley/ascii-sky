@@ -1,10 +1,3 @@
-// The live sky's clouds, cut from the painting: each cloud is a sprite (how
-// much cloud, how shaded), feathered where the painting's frame cuts it,
-// scaled and placed in one of two layers that tile every PERIOD page
-// pixels: near (the big clouds, faster) and far (small, high,
-// slower). Written at half the page's pixels as RGB: red for shade (0 lit
-// .. 255 deep), green for how much cloud.
-//   node paint-clouds.mjs <painting.png> <outDir> [sheet]
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -24,8 +17,6 @@ const smooth = (a, b, t) => {
 const { data: img, info } = await sharp(input).removeAlpha().raw().toBuffer({ resolveWithObject: true });
 const IW = info.width;
 const IH = info.height;
-// Cloud: pale and grey rather than blue. Shade: how far below the
-// cloud's brightest it is.
 const alpha = new Float32Array(IW * IH);
 const shade = new Float32Array(IW * IH);
 for (let i = 0; i < IW * IH; i++) {
@@ -38,7 +29,6 @@ for (let i = 0; i < IW * IH; i++) {
   shade[i] = Math.min(1, Math.max(0, (env("S_TOP", 0.96) - L) / env("S_SPAN", 0.26)));
 }
 
-/** Smooth noise along a line, 0 .. 1, a new value every `step` pixels. */
 function wave(t, seed, step = 38) {
   const u = t / step;
   const i = Math.floor(u);
@@ -51,13 +41,6 @@ function wave(t, seed, step = 38) {
   return r(i) + (r(i + 1) - r(i)) * f * f * (3 - 2 * f);
 }
 
-/**
- * A sprite: the painting's rect [x0, y0, x1, y1], feathered by `fade`
- * pixels on each side ([left, top, right, bottom]), each by a distance
- * that wanders along the side, so a cut through a cloud comes out ragged
- * like a cloud's edge, not straight. Everything outside an ellipse fitted
- * to the rect also fades, so neighbours do not leak in.
- */
 function sprite(name, [x0, y0, x1, y1], fade = [0, 0, 0, 0], flip = false) {
   const w = x1 - x0;
   const h = y1 - y0;
@@ -73,7 +56,6 @@ function sprite(name, [x0, y0, x1, y1], fade = [0, 0, 0, 0], flip = false) {
       if (fade[1]) f *= smooth(0, reach(1, x), y);
       if (fade[2]) f *= smooth(0, reach(2, y), w - 1 - x);
       if (fade[3]) f *= smooth(0, reach(3, x), h - 1 - y);
-      // Soft corners: the rect's own ellipse, generous.
       const ex = (x - w / 2) / (w * 0.62);
       const ey = (y - h / 2) / (h * 0.62);
       f *= 1 - smooth(0.82, 1, Math.hypot(ex, ey));
@@ -81,16 +63,11 @@ function sprite(name, [x0, y0, x1, y1], fade = [0, 0, 0, 0], flip = false) {
       a[k] = alpha[i] * f;
       s[k] = shade[i];
     }
-  // A simpler outline: small gaps between lobes filled and ragged edges
-  // rounded, so the cloud reads as one shape at the size of a glyph; wisps
-  // outside it stay, fainter.
   const SIMPLE_R = env("SIMPLE_R", 10);
   if (SIMPLE_R > 0) {
     const soft = boxBlur(boxBlur(a, w, h, SIMPLE_R), w, h, Math.round(SIMPLE_R / 2));
     for (let k = 0; k < w * h; k++) a[k] = Math.max(a[k] * env("WISP", 0.7), smooth(env("SIMPLE_LO", 0.28), env("SIMPLE_HI", 0.55), soft[k]));
   }
-  // Brushwork brought out: shade pushed away from its blur, then spread
-  // over the whole range by rank within the cloud, so every sprite's shading uses every glyph.
   const blur = boxBlur(s, w, h, env("DETAIL_R", 5));
   const detail = new Float32Array(w * h);
   for (let k = 0; k < w * h; k++) detail[k] = Math.min(1, Math.max(0, blur[k] + env("DETAIL", 1.8) * (s[k] - blur[k])));
@@ -142,9 +119,6 @@ function boxBlur(src, w, h, r) {
   return out;
 }
 
-// Clouds of every kind the painting has: the big cumulus whole and in
-// parts (its tower, its crown, its right lobe, its base), heaped and
-// flat-bottomed cumulus, low rows near the horizon, small puffs and wisps.
 const SPRITES = {
   big: sprite("big", [819, 26, 1536, 610], [0, 0, 110, 40]),
   crown: sprite("crown", [1090, 0, 1430, 300], [70, 0, 60, 90]),
@@ -164,7 +138,6 @@ const SPRITES = {
 };
 
 if (sheet) {
-  // A look at each sprite, cloud white on blue, two to a row, named.
   const COL = 520;
   const parts = [];
   let top = 0;
@@ -196,17 +169,11 @@ if (sheet) {
   process.exit(0);
 }
 
-/**
- * Places a sprite scaled by `scale` with its middle at x and its bottom
- * at `base`: `wide` stretches it sideways (above 1) or narrows it, and
- * `flip` mirrors it, so one cut-out can be several clouds.
- */
 function place(layer, sp, x, base, scale, { wide = 1, flip = false } = {}) {
   const w = Math.round(sp.w * scale * wide);
   const h = Math.round(sp.h * scale);
   const left = Math.round(x - w / 2);
   const top = Math.round(base - h);
-  // Area-average resampling of premultiplied shade.
   for (let y = 0; y < h; y++)
     for (let xx = 0; xx < w; xx++) {
       const sx0 = (xx / w) * sp.w;
@@ -229,7 +196,6 @@ function place(layer, sp, x, base, scale, { wide = 1, flip = false } = {}) {
       if (py < 0 || py >= H || a <= 0) continue;
       const px = (((left + xx) % PERIOD) + PERIOD) % PERIOD;
       const k = py * PERIOD + px;
-      // Over: the new sprite in front.
       const under = layer.a[k];
       const total = a + under * (1 - a);
       layer.s[k] = total > 0 ? (s * a + layer.s[k] * under * (1 - a)) / total : 0;
@@ -242,10 +208,6 @@ const layers = {
   far: { a: new Float32Array(PERIOD * H), s: new Float32Array(PERIOD * H) },
 };
 const S = SPRITES;
-// Near: the clouds in the top 240 to 360 page pixels of the sky, each
-// a different kind and size, about one every 350 pixels, with open sky
-// between: one big cumulus, a crown, a flat-bottomed one, low rows, a
-// long one and wisps.
 place(layers.near, S.big, 330, 330, 0.42);
 place(layers.near, S.wisp1, 760, 95, 0.9, { wide: 1.3 });
 place(layers.near, S.flat, 820, 255, 0.6);
@@ -253,11 +215,9 @@ place(layers.near, S.row, 1180, 335, 0.62, { flip: true });
 place(layers.near, S.crown, 1540, 215, 0.55, { wide: 1.3 });
 place(layers.near, S.left, 1960, 320, 0.5, { wide: 1.15 });
 place(layers.near, S.wisp2, 2290, 140, 0.75, { wide: 1.4 });
-// Lower, seen beside the text.
 place(layers.near, S.heap, 160, 640, 0.42, { wide: 1.35 });
 place(layers.near, S.lowMid, 1000, 560, 0.7);
 place(layers.near, S.row, 1760, 660, 0.5);
-// Far: smaller, higher, slower, and other kinds again.
 place(layers.far, S.topLeft, 110, 115, 0.3);
 place(layers.far, S.puffs, 540, 175, 0.42, { wide: 1.2 });
 place(layers.far, S.rowEnd, 900, 80, 0.45);
@@ -272,7 +232,6 @@ place(layers.far, S.rowEnd, 2200, 430, 0.5, { flip: true });
 const LW = PERIOD / 2;
 const LH = H / 2;
 for (const [name, layer] of Object.entries(layers)) {
-  // Clean the faintest specks.
   const out = Buffer.alloc(LW * LH * 3);
   const half = new Float32Array(LW * LH);
   for (let j = 0; j < LH; j++)
@@ -289,7 +248,6 @@ for (const [name, layer] of Object.entries(layers)) {
       const ac = smooth(0.04, 1, a);
       half[j * LW + i] = ac;
       const o = (j * LW + i) * 3;
-      // 64 levels each: plenty for glyphs, and they pack small.
       const q = (v) => Math.min(255, Math.round(v * 63) * 4.05) | 0;
       out[o] = ac > 0 ? q(s) : 0;
       out[o + 1] = q(ac);

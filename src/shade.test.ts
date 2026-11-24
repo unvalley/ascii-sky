@@ -8,14 +8,8 @@ import { createSparkles, TINTS } from "./sparkle.ts";
 
 const CELL = { cw: 6, ch: 9.75 };
 const CLOUD = GLYPHS.indexOf("8");
-/** Open sky's glyph for a painting this blue (0 .. 1). */
 const sky = (density: number) => GLYPHS.indexOf(SKY_RAMP[Math.round(density * (SKY_RAMP.length - 1))]);
 
-/**
- * Cells to test with: open sky whose blue is `density`, and a cloud
- * glyph right of page x `cloudFrom`. It counts the cells it was asked
- * about and remembers the push it was given.
- */
 function fakeCells(density: number, cloudFrom = Number.POSITIVE_INFINITY) {
   const seen = { cells: 0, push: [0, 0] };
   const cells: SkyCells = {
@@ -36,7 +30,6 @@ function fakeCells(density: number, cloudFrom = Number.POSITIVE_INFINITY) {
 }
 
 function setup(width = 400, height = 240, faint = 0) {
-  // The still sky is as wide as the canvas, so cells sit at page x.
   const grid = layoutGrid(width, height, 1, width, CELL, faint);
   const n = grid.cols * grid.rows * 4;
   const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n));
@@ -180,7 +173,7 @@ describe("turns", () => {
     const { cells, seen } = fakeCells(0.5);
     shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
     air.stirred = true;
-    const k = 1 * grid.cols + 5; // row 1: not row 0's turn
+    const k = 1 * grid.cols + 5;
     air.glow[k] = 0.5;
     air.dx[k + 1] = 3;
     seen.cells = 0;
@@ -208,7 +201,6 @@ describe("wind", () => {
     assert.deepEqual(day.tile, [220, 220, 220], "the day's tiles stay as they are");
     const vice = at("vice");
     assert.ok(vice.tile[0] < day.tile[0] - 20 && vice.tile[2] > vice.tile[0] + 25, `a cyan tile: ${vice.tile}`);
-    // The glyph (100, 150, 200 here) goes most of the way to the wind's cyan.
     assert.ok(vice.glyph[0] < 30 && vice.glyph[1] > 175, `a cyan glyph: ${vice.glyph}`);
   });
 });
@@ -221,7 +213,7 @@ describe("night", () => {
     const { cells } = fakeCells(0.5);
     const sp = createSparkles(grid.cols, grid.rows);
     shadeFrame(grid, cells, air, frame, 0, "dark", EVERY_ROW, 3, 0, night, sp);
-    const k = 1 * grid.cols + 4; // row 1: not row 0's turn
+    const k = 1 * grid.cols + 4;
     sp.code[k] = GLYPHS.indexOf("*");
     sp.tint[k] = 1;
     sp.touched[k] = 1;

@@ -1,8 +1,3 @@
-/**
- * Loads the sky's files and works out what each cell can show (cells.ts).
- * It needs a browser: the images are decoded and the glyphs measured on
- * canvases.
- */
 import { sky } from "./art.ts";
 import { measureShapes } from "./atlas.ts";
 import { type SkyCells, skyCells } from "./cells.ts";
@@ -33,10 +28,6 @@ async function textOf(url: string, signal?: AbortSignal) {
   return response.text();
 }
 
-/**
- * The sky's cells, from its files at `assets` (see files.ts), ready for
- * startSky.
- */
 export async function loadSky(
   assets: SkyAssets = DEFAULT_ASSETS,
   signal?: AbortSignal,

@@ -7,7 +7,6 @@ import { VICE_STOPS, viceColours, viceGradient } from "./vice.ts";
 const COLUMNS = 3;
 const ROWS = 60;
 const CH = 10;
-/** A still sky whose columns hold the lightest, a middle and the densest glyph. */
 const text = Array.from(
   { length: ROWS },
   () => `${SKY_RAMP[0]}${SKY_RAMP[4]}${SKY_RAMP[SKY_RAMP.length - 1]}`,
@@ -17,7 +16,6 @@ const at = (c: number, r: number) => {
   const o = (r * COLUMNS + c) * 4;
   return [colours[o], colours[o + 1], colours[o + 2], colours[o + 3]];
 };
-/** Hue in degrees (OKLab), 0 .. 360. */
 const hue = ([r, g, b]: number[]) => {
   const [, a, bb] = oklab(r, g, b);
   return ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360;
@@ -31,7 +29,7 @@ describe("vice", () => {
 
   test("runs from violet at the top to orange low down", () => {
     const top = at(1, 0);
-    const low = at(1, 33); // 335 page pixels down
+    const low = at(1, 33);
     assert.ok(top[2] > top[1] && top[2] > 150, `violet top: ${top}`);
     assert.ok(low[0] > 230 && low[0] > low[1] && low[1] > low[2], `orange low: ${low}`);
     assert.ok(hue(top) > 260 && hue(top) < 320, `top hue ${hue(top)}`);

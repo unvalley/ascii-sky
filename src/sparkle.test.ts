@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 import { GLYPHS } from "./cells.ts";
 import { createSparkles, MOST, stepSparkles, TICK } from "./sparkle.ts";
 
-/** Numbers in [0, 1) from a fixed seed, the same each run. */
 function seeded(seed = 1) {
   let s = seed;
   return () => {

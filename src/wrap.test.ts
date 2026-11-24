@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { wrap } from "./wrap.ts";
 
-/** What wrap stands in for. (It gives -0 where wrap gives 0: the same
- * number, and the same lookups.) */
 const slow = (x: number, n: number) => {
   let w = x % n;
   if (w < 0) w += n;

@@ -39,7 +39,6 @@ describe("lively air", () => {
       if (!air.lively && !settled) settled = i * STEP;
     }
     assert.ok(settled > 0, "settles");
-    // Lively until no cell shows any more, which comes before stillness.
     assert.ok(air.stirred === false);
   });
 
@@ -114,7 +113,6 @@ describe("air", () => {
     const y = 30.5 * CH;
     puff(air, x, y);
     assert.equal(air.stirred, true);
-    // How far from the click the lit air is, on average.
     const out = () => {
       let sum = 0;
       let weight = 0;
