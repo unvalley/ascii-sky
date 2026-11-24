@@ -1,4 +1,4 @@
-# ascii-sky
+## ascii-sky
 
 A painted blue sky in ASCII on a canvas. Clouds drift on the wind, the
 pointer stirs the air, and a click sends a gust. It is the sky at the top
@@ -17,7 +17,7 @@ of [unvalley.me](https://unvalley.me). MIT
   </tr>
 </table>
 
-## Run it
+### Run it:
 
 ```bash
 pnpm install
@@ -31,7 +31,7 @@ const sky = mountSky(canvas, { theme: "auto" }); // "light", "dark", "vice" (GTA
 For React there is `<AsciiSky />` in `src/react.tsx`. To make a sky from
 your own picture, see [scripts/README.md](scripts/README.md).
 
-## Acknowledgements
+### Acknowledgements:
 
 - Dao's koi fish: https://www.daoho.dev/
 - stacked's shark: https://github.com/stackedlol/ascii-sharks
