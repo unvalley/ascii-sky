@@ -1,8 +1,7 @@
 ## ascii-sky
 
-A painted blue sky in ASCII on a canvas. Clouds drift on the wind, the
-pointer stirs the air, and a click sends a gust. It is the sky at the top
-of [unvalley.me](https://unvalley.me). MIT
+A painted blue sky in ASCII on a canvas.
+It is the sky at the top of [my website](https://unvalley.me).
 
 https://github.com/user-attachments/assets/b6954efa-1118-4c32-b5b6-e8f6eaaf9829
 
