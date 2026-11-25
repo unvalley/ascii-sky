@@ -24,6 +24,8 @@ your own picture, see [scripts/README.md](scripts/README.md).
 
 ### Acknowledgements:
 
+this work inspired by
+
 - Dao's koi fish: https://www.daoho.dev/
 - stacked's shark: https://github.com/stackedlol/ascii-sharks
 - Alex Harri's [ASCII rendering](https://alexharri.com/blog/ascii-rendering), which the cloud edges are drawn after
