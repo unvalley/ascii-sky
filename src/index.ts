@@ -35,7 +35,7 @@ const SKY_FILES = {
 export type SkyAssets = string | Readonly<Record<keyof typeof SKY_FILES, string>>;
 
 const DEFAULT_ASSETS = "/ascii-sky/";
-const CELL = { cw: sky.cellWidth, ch: sky.cellHeight };
+const CELL = { width: sky.cellWidth, height: sky.cellHeight };
 
 const skyUrl = (assets: SkyAssets, file: keyof typeof SKY_FILES): string => {
   if (typeof assets !== "string") {
@@ -84,8 +84,8 @@ const loadSky = async (assets: SkyAssets, signal: AbortSignal): Promise<SkyCells
     still: {
       columns: sky.columns,
       rows: sky.rows,
-      cw: sky.cellWidth,
-      ch: sky.cellHeight,
+      cellWidth: sky.cellWidth,
+      cellHeight: sky.cellHeight,
       text,
       rgb: {
         light: light.pixels,

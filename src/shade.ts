@@ -1,20 +1,35 @@
 import { type Air, seenAt } from "./air.ts";
 import {
+  ALPHA,
+  BLANK,
+  BYTE_MAX,
+  CENTRE,
+  type CellAt,
+  DENSITY,
+  GLYPH_RGB,
   glyphOf,
   hash,
+  hex,
+  LOOK_SLOTS,
   OPEN_SKY,
+  RGB,
+  RGBA,
   range,
+  rounded,
   SKY_RAMP,
   type SkyCells,
   type SkyTheme,
   span,
+  TAU,
+  TILE_ALPHA,
+  TILE_RGB,
 } from "./cells.ts";
 
 const SINE_SIZE = 4096;
 const SINE = Float64Array.from({ length: SINE_SIZE + 1 }, (_, i) =>
   Math.sin((i / SINE_SIZE) * Math.PI * 2),
 );
-const PER_RADIAN = SINE_SIZE / (Math.PI * 2);
+const PER_RADIAN = SINE_SIZE / TAU;
 
 export const sine = (a: number): number => {
   const turns = a * PER_RADIAN;
@@ -24,70 +39,72 @@ export const sine = (a: number): number => {
   return v + (SINE[i + 1] - v) * (at - i);
 };
 
+const unit = (wave: number) => CENTRE + CENTRE * wave;
+
 export type Grid = Readonly<{
   width: number;
   height: number;
   dpr: number;
-  pw: number;
-  ph: number;
-  cw: number;
-  ch: number;
-  cols: number;
+  pixelWidth: number;
+  pixelHeight: number;
+  cellWidth: number;
+  cellHeight: number;
+  columns: number;
   rows: number;
   originX: number;
-  skyX: number;
-  left: Int32Array;
-  across: Int32Array;
-  top: Int32Array;
-  down: Int32Array;
-  faint: number;
+  skyOffset: number;
+  columnLeft: Int32Array;
+  columnWidth: Int32Array;
+  rowTop: Int32Array;
+  rowHeight: Int32Array;
+  faintFrom: number;
   faintRow: number;
 }>;
 
-export type Cell = Readonly<{ cw: number; ch: number }>;
+export type CellSize = Readonly<{ width: number; height: number }>;
 
 export const layoutGrid = (
   width: number,
   height: number,
   dpr: number,
   skyWidth: number,
-  { cw, ch }: Cell,
-  faint = 0,
+  cell: CellSize,
+  faintFrom = 0,
 ): Grid => {
-  const half = Math.floor(width / 2 / cw);
-  const originX = width / 2 - half * cw;
-  const cols = half * 2;
-  const rows = Math.ceil(height / ch);
-  const xAt = (c: number) => originX + c * cw;
-  const left = Int32Array.from({ length: cols }, (_, c) => Math.round(xAt(c) * dpr));
-  const top = Int32Array.from({ length: rows }, (_, r) => Math.round(r * ch * dpr));
+  const half = Math.floor(width / 2 / cell.width);
+  const originX = width / 2 - half * cell.width;
+  const columns = half * 2;
+  const rows = Math.ceil(height / cell.height);
+  const xAt = (c: number) => originX + c * cell.width;
+  const columnLeft = Int32Array.from({ length: columns }, (_, c) => Math.round(xAt(c) * dpr));
+  const rowTop = Int32Array.from({ length: rows }, (_, r) => Math.round(r * cell.height * dpr));
   return {
     width,
     height,
     dpr,
-    pw: Math.round(width * dpr),
-    ph: Math.round(height * dpr),
-    cw,
-    ch,
-    cols,
+    pixelWidth: Math.round(width * dpr),
+    pixelHeight: Math.round(height * dpr),
+    cellWidth: cell.width,
+    cellHeight: cell.height,
+    columns,
     rows,
     originX,
-    skyX: skyWidth / 2 - width / 2,
-    left,
-    across: left.map((from, c) => Math.round((xAt(c) + cw) * dpr) - from),
-    top,
-    down: top.map((from, r) => Math.round((r * ch + ch) * dpr) - from),
-    faint,
-    faintRow: faint > 0 ? Math.min(rows, Math.ceil(faint / ch)) : rows,
+    skyOffset: skyWidth / 2 - width / 2,
+    columnLeft,
+    columnWidth: columnLeft.map((left, c) => Math.round((xAt(c) + cell.width) * dpr) - left),
+    rowTop,
+    rowHeight: rowTop.map((top, r) => Math.round((r * cell.height + cell.height) * dpr) - top),
+    faintFrom,
+    faintRow: faintFrom > 0 ? Math.min(rows, Math.ceil(faintFrom / cell.height)) : rows,
   };
 };
 
-const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], sunset: [0, 190, 230] } as const;
+const GLOW = { light: hex("#1052d6"), dark: hex("#d6f0ff"), sunset: hex("#00bee6") };
 const WIND_TINT = {
   light: { glyph: 1, tile: 0 },
   dark: { glyph: 1, tile: 0 },
   sunset: { glyph: 2.2, tile: 0.4 },
-} as const;
+};
 const STREAK = { glow: 0.28, speed: 50 };
 const GUSTY = 0.7;
 const LEVEL = 2.4;
@@ -99,6 +116,19 @@ const RISING = glyphOf("/");
 const FALLING = glyphOf("\\");
 const RAMP = [...SKY_RAMP].map(glyphOf);
 const STAR = [...".......++*"].map(glyphOf);
+const BAND = {
+  across: 0.09,
+  acrossSpeed: 0.3,
+  down: 0.15,
+  downSpeed: 0.23,
+  light: 0.93,
+  depth: 0.07,
+};
+const BREATH = { floor: 0.9, depth: 0.1 };
+const BREATH_SEED = { phase: 23, pace: 37 };
+const BREATH_PACE = { slowest: 0.25, spread: 0.9 };
+const TWINKLE = { floor: 0.35, depth: 0.65, speed: 2.2 };
+const STAR_SEED = { place: 101, glyph: 103 };
 export const TURNS = 3;
 export const EVERY_ROW = -1;
 export const UNDRAWN = -2;
@@ -112,67 +142,60 @@ export type Stars = Readonly<{
 
 export const NIGHT: Stars = {
   stars: 0.03,
-  star: [255, 246, 216],
-  glow: [176, 200, 255],
+  star: hex("#fff6d8"),
+  glow: hex("#b0c8ff"),
   sparkle: true,
 };
-const NO_STARS: Stars = { stars: 0, star: [255, 255, 255], glow: GLOW.dark };
+const NO_STARS: Stars = { stars: 0, star: hex("#ffffff"), glow: GLOW.dark };
 
-export const starAt = (sc: number, r: number, share: number): boolean => hash(sc, r, 101) < share;
+export const starAt = (column: number, row: number, share: number): boolean =>
+  hash(column, row, STAR_SEED.place) < share;
 
 export const TICK = 0.09;
 export const MOST = { big: 4, small: 12 };
-export const TINTS = [
-  [255, 255, 255],
-  [253, 230, 138],
-  [224, 247, 255],
-] as const;
+export const TINTS = [hex("#ffffff"), hex("#fde68a"), hex("#e0f7ff")];
+const SPAWN_TRIES = 24;
+const SPAWN_MARGIN = { columns: 2, rows: 1 };
+const BIG_CHANCE = 0.35;
+const SMALL_CHANCE = 0.6;
+const SMALL_TRIES = 2;
+const BIG_REACH = 2;
 
 type Step = readonly (readonly [number, number, number])[];
 
-const SMALL: readonly Step[] = [...".+*+."].map((s) => [[0, 0, glyphOf(s)]] as const);
+const picture = (...lines: string[]): Step => {
+  const middleRow = (lines.length - 1) / 2;
+  const middleColumn = (lines[0].length - 1) / 2;
+  return lines.flatMap((line, y) =>
+    [...line].flatMap((glyph, x) =>
+      glyph === " " ? [] : [[x - middleColumn, y - middleRow, glyphOf(glyph)] as const],
+    ),
+  );
+};
+
+const SMALL: readonly Step[] = [...".+*+."].map((glyph) => picture(glyph));
 const BIG: readonly Step[] = [
-  [[0, 0, glyphOf(".")]],
-  [[0, 0, glyphOf("+")]],
-  [
-    [0, 0, glyphOf("*")],
-    [-1, 0, glyphOf("-")],
-    [1, 0, glyphOf("-")],
-    [0, -1, glyphOf("|")],
-    [0, 1, glyphOf("|")],
-  ],
-  [
-    [0, 0, glyphOf("*")],
-    [-1, 0, glyphOf("-")],
-    [1, 0, glyphOf("-")],
-    [-2, 0, glyphOf(".")],
-    [2, 0, glyphOf(".")],
-    [0, -1, glyphOf("|")],
-    [0, 1, glyphOf("|")],
-  ],
-  [
-    [0, 0, glyphOf("+")],
-    [-1, 0, glyphOf("-")],
-    [1, 0, glyphOf("-")],
-    [0, -1, glyphOf("'")],
-    [0, 1, glyphOf(".")],
-  ],
-  [[0, 0, glyphOf("+")]],
-  [[0, 0, glyphOf(".")]],
+  picture("."),
+  picture("+"),
+  picture(" | ", "-*-", " | "),
+  picture("  |  ", ".-*-.", "  |  "),
+  picture(" ' ", "-+-", " . "),
+  picture("+"),
+  picture("."),
 ];
 
 type Sparkle = Readonly<{
   steps: readonly Step[] | null;
   age: number;
-  c: number;
-  r: number;
+  column: number;
+  row: number;
   tint: number;
 }>;
 
-const GONE: Sparkle = { steps: null, age: 0, c: 0, r: 0, tint: 0 };
+const GONE: Sparkle = { steps: null, age: 0, column: 0, row: 0, tint: 0 };
 
 export type Sparkles = {
-  readonly cols: number;
+  readonly columns: number;
   readonly rows: number;
   readonly code: Int16Array;
   readonly tint: Uint8Array;
@@ -182,12 +205,12 @@ export type Sparkles = {
   owed: number;
 };
 
-export const createSparkles = (cols: number, rows: number): Sparkles => ({
-  cols,
+export const createSparkles = (columns: number, rows: number): Sparkles => ({
+  columns,
   rows,
-  code: new Int16Array(cols * rows).fill(-1),
-  tint: new Uint8Array(cols * rows),
-  touched: new Uint8Array(cols * rows),
+  code: new Int16Array(columns * rows).fill(BLANK),
+  tint: new Uint8Array(columns * rows),
+  touched: new Uint8Array(columns * rows),
   touchedRows: new Uint8Array(rows),
   pool: range(MOST.big + MOST.small).map(() => GONE),
   owed: 0,
@@ -196,45 +219,48 @@ export const createSparkles = (cols: number, rows: number): Sparkles => ({
 const lay = (sp: Sparkles, s: Sparkle, on: boolean) => {
   const step = s.steps?.[s.age] ?? [];
   step.forEach(([dc, dr, glyph]) => {
-    const c = s.c + dc;
-    const r = s.r + dr;
-    if (c < 0 || r < 0 || c >= sp.cols || r >= sp.rows) {
+    const c = s.column + dc;
+    const r = s.row + dr;
+    if (c < 0 || r < 0 || c >= sp.columns || r >= sp.rows) {
       return;
     }
-    const k = r * sp.cols + c;
-    sp.code[k] = on ? glyph : -1;
+    const k = r * sp.columns + c;
+    sp.code[k] = on ? glyph : BLANK;
     sp.tint[k] = s.tint;
     sp.touched[k] = 1;
     sp.touchedRows[r] = 1;
   });
 };
 
-const crowded = (sp: Sparkles, steps: readonly Step[], c: number, r: number) => {
-  const reach = steps === BIG ? 2 : 0;
-  return span(r - 1, r + 1).some((rr) =>
-    span(c - reach, c + reach).some(
-      (cc) => cc < 0 || rr < 0 || cc >= sp.cols || rr >= sp.rows || sp.code[rr * sp.cols + cc] >= 0,
+const crowded = (sp: Sparkles, steps: readonly Step[], column: number, row: number) => {
+  const reach = steps === BIG ? BIG_REACH : 0;
+  return span(row - 1, row + 1).some((r) =>
+    span(column - reach, column + reach).some(
+      (c) => c < 0 || r < 0 || c >= sp.columns || r >= sp.rows || sp.code[r * sp.columns + c] >= 0,
     ),
   );
 };
 
-type Spot = Readonly<{ c: number; r: number }>;
+type Spot = Readonly<{ column: number; row: number }>;
 
 const findSpot = (
   sp: Sparkles,
   steps: readonly Step[],
   rows: number,
-  isStar: (c: number, r: number) => boolean,
+  isStar: (column: number, row: number) => boolean,
   random: () => number,
   tries: number,
 ): Spot | null => {
   if (tries === 0) {
     return null;
   }
-  const c = 2 + Math.floor(random() * (sp.cols - 4));
-  const r = 1 + Math.floor(random() * Math.max(1, Math.min(rows, sp.rows) - 2));
-  return isStar(c, r) && !crowded(sp, steps, c, r)
-    ? { c, r }
+  const column =
+    SPAWN_MARGIN.columns + Math.floor(random() * (sp.columns - 2 * SPAWN_MARGIN.columns));
+  const row =
+    SPAWN_MARGIN.rows +
+    Math.floor(random() * Math.max(1, Math.min(rows, sp.rows) - 2 * SPAWN_MARGIN.rows));
+  return isStar(column, row) && !crowded(sp, steps, column, row)
+    ? { column, row }
     : findSpot(sp, steps, rows, isStar, random, tries - 1);
 };
 
@@ -243,11 +269,11 @@ const spawn = (
   pool: readonly Sparkle[],
   steps: readonly Step[],
   rows: number,
-  isStar: (c: number, r: number) => boolean,
+  isStar: (column: number, row: number) => boolean,
   random: () => number,
 ): readonly Sparkle[] => {
   const slot = pool.findIndex((s) => !s.steps);
-  const spot = slot < 0 ? null : findSpot(sp, steps, rows, isStar, random, 24);
+  const spot = slot < 0 ? null : findSpot(sp, steps, rows, isStar, random, SPAWN_TRIES);
   if (!spot) {
     return pool;
   }
@@ -270,16 +296,17 @@ const tickSparkles = (
   sp: Sparkles,
   pool: readonly Sparkle[],
   rows: number,
-  isStar: (c: number, r: number) => boolean,
+  isStar: (column: number, row: number) => boolean,
   random: () => number,
 ): readonly Sparkle[] => {
   const now = pool.map((s) => older(sp, s));
   const big = now.filter((s) => s.steps === BIG).length;
   const small = now.filter((s) => s.steps === SMALL).length;
   const withBig =
-    big < MOST.big && random() < 0.35 ? spawn(sp, now, BIG, rows, isStar, random) : now;
-  return range(2).reduce(
-    (p) => (small < MOST.small && random() < 0.6 ? spawn(sp, p, SMALL, rows, isStar, random) : p),
+    big < MOST.big && random() < BIG_CHANCE ? spawn(sp, now, BIG, rows, isStar, random) : now;
+  return range(SMALL_TRIES).reduce(
+    (p) =>
+      small < MOST.small && random() < SMALL_CHANCE ? spawn(sp, p, SMALL, rows, isStar, random) : p,
     withBig,
   );
 };
@@ -288,7 +315,7 @@ export const stepSparkles = (
   sp: Sparkles,
   dt: number,
   rows: number,
-  isStar: (c: number, r: number) => boolean,
+  isStar: (column: number, row: number) => boolean,
   random: () => number = Math.random,
 ): void => {
   const settle = (debt: number, live: readonly Sparkle[]): readonly [number, readonly Sparkle[]] =>
@@ -304,17 +331,19 @@ export type Frame = Readonly<{
   shown: Int16Array;
   changed: Int32Array;
   breath: Float32Array;
-  out: number[];
+  look: number[];
   night: Stars;
   sparkles: Sparkles | null;
 }>;
 
-export const breathing = (cols: number, rows: number): Float32Array =>
-  Float32Array.from({ length: cols * rows * 2 }, (_, i) => {
+export const breathing = (columns: number, rows: number): Float32Array =>
+  Float32Array.from({ length: columns * rows * 2 }, (_, i) => {
     const k = Math.floor(i / 2);
-    const c = k % cols;
-    const r = (k - c) / cols;
-    return i % 2 === 0 ? hash(c, r, 23) * Math.PI * 2 : 0.25 + hash(c, r, 37) * 0.9;
+    const c = k % columns;
+    const r = (k - c) / columns;
+    return i % 2 === 0
+      ? hash(c, r, BREATH_SEED.phase) * Math.PI * 2
+      : BREATH_PACE.slowest + hash(c, r, BREATH_SEED.pace) * BREATH_PACE.spread;
   });
 
 export const createFrame = (
@@ -323,16 +352,16 @@ export const createFrame = (
   tiles: Uint8ClampedArray,
   night: Stars = NO_STARS,
 ): Frame => {
-  const { cols, rows } = grid;
+  const { columns, rows } = grid;
   return {
     colours,
     tiles,
-    shown: new Int16Array(cols * rows).fill(UNDRAWN),
-    changed: new Int32Array(cols * rows),
-    breath: breathing(cols, rows),
-    out: [0, 0, 0, 0, 0, 0, 0, 0],
+    shown: new Int16Array(columns * rows).fill(UNDRAWN),
+    changed: new Int32Array(columns * rows),
+    breath: breathing(columns, rows),
+    look: range(LOOK_SLOTS).map(() => 0),
     night,
-    sparkles: night.sparkle ? createSparkles(cols, rows) : null,
+    sparkles: night.sparkle ? createSparkles(columns, rows) : null,
   };
 };
 
@@ -348,10 +377,108 @@ export const streak = (vx: number, vy: number, glow: number): number => {
   return vx * vy < 0 ? RISING : FALLING;
 };
 
-const paint = (out: number[], rgb: readonly number[]) => {
-  out[0] = rgb[0];
-  out[1] = rgb[1];
-  out[2] = rgb[2];
+const paint = (look: number[], rgb: readonly number[]) => {
+  look[GLYPH_RGB] = rgb[0];
+  look[GLYPH_RGB + 1] = rgb[1];
+  look[GLYPH_RGB + 2] = rgb[2];
+};
+
+type Pass = Readonly<{
+  grid: Grid;
+  frame: Frame;
+  air: Air;
+  cellAt: CellAt;
+  t: number;
+  glow: readonly number[];
+  windTint: Readonly<{ glyph: number; tile: number }>;
+  stars: number;
+  sparks: Sparkles | null;
+  across: Float64Array;
+  down: number;
+}>;
+
+const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number): number => {
+  const { grid, frame, air, cellAt, t, glow, windTint, stars, sparks, across, down } = pass;
+  const { columns, cellWidth, cellHeight, originX, skyOffset } = grid;
+  const { colours, tiles, shown, changed, breath, look, night } = frame;
+  const { stirred, vx, vy, dx, dy } = air;
+  const densest = RAMP.length - 1;
+  const y = r * cellHeight;
+  let changes = changesSoFar;
+  for (let c = 0; c < columns; c++) {
+    const k = r * columns + c;
+    if (offTurn && !seenAt(air, k) && !sparks?.touched[k]) {
+      continue;
+    }
+    const o = k * RGBA;
+    const was = shown[k];
+    const drawn = cellAt(
+      originX + c * cellWidth + skyOffset,
+      y,
+      cellWidth,
+      cellHeight,
+      look,
+      was >= 0 ? was : BLANK,
+      stirred ? dx[k] : 0,
+      stirred ? dy[k] : 0,
+    );
+    let code = drawn;
+    let alpha = 1;
+    if (drawn === OPEN_SKY) {
+      const phase = breath[k * 2];
+      const pace = breath[k * 2 + 1];
+      const breathe = unit(sine(t * pace + phase));
+      const band = BAND.light + BAND.depth * across[c] * down;
+      alpha = (BREATH.floor + BREATH.depth * breathe) * band;
+      look[TILE_ALPHA] *= band;
+      code = RAMP[rounded(look[DENSITY] * densest)];
+      if (stars > 0) {
+        const skyColumn = Math.floor((originX + c * cellWidth + skyOffset) / cellWidth);
+        if (starAt(skyColumn, r, stars)) {
+          code = STAR[(hash(skyColumn, r, STAR_SEED.glyph) * STAR.length) | 0];
+          const twinkle = unit(sine(t * TWINKLE.speed * pace + phase));
+          alpha = TWINKLE.floor + TWINKLE.depth * twinkle;
+          paint(look, night.star);
+        }
+      }
+      if (sparks) {
+        const spark = sparks.code[k];
+        sparks.touched[k] = 0;
+        if (spark >= 0) {
+          code = spark;
+          paint(look, TINTS[sparks.tint[k]]);
+          alpha = 1;
+        }
+      }
+      const g = stirred ? Math.min(1, air.glow[k]) : 0;
+      if (g > UNLIT) {
+        alpha += (1 - alpha) * g;
+        const m = Math.min(1, g * windTint.glyph);
+        for (let j = 0; j < RGB; j++) {
+          look[GLYPH_RGB + j] += (glow[j] - look[GLYPH_RGB + j]) * m;
+          look[TILE_RGB + j] += (glow[j] - look[TILE_RGB + j]) * g * windTint.tile;
+        }
+        const wx = vx[k];
+        const wy = vy[k];
+        if (g > STREAK.glow && Math.abs(wx) + Math.abs(wy) > STREAK.speed) {
+          code = streak(wx, wy, g);
+        }
+      }
+    }
+    colours[o] = look[GLYPH_RGB];
+    colours[o + 1] = look[GLYPH_RGB + 1];
+    colours[o + 2] = look[GLYPH_RGB + 2];
+    colours[o + ALPHA] = code < 0 ? 0 : rounded(alpha * BYTE_MAX);
+    tiles[o] = look[TILE_RGB];
+    tiles[o + 1] = look[TILE_RGB + 1];
+    tiles[o + 2] = look[TILE_RGB + 2];
+    tiles[o + ALPHA] = rounded(look[TILE_ALPHA] * BYTE_MAX);
+    if (code !== shown[k]) {
+      shown[k] = code;
+      changed[changes++] = k;
+    }
+  }
+  return changes;
 };
 
 export const shadeFrame = (
@@ -365,105 +492,35 @@ export const shadeFrame = (
   every = 1,
   turn = 0,
 ): number => {
-  const { cols, rows, cw, ch, originX, skyX, faintRow } = grid;
-  const { colours, tiles, shown, changed, breath, out, night } = frame;
+  const { columns, rows, faintRow } = grid;
   const dark = theme === "dark";
-  const glow = dark ? night.glow : GLOW[theme];
-  const windTint = WIND_TINT[theme];
-  const stars = dark ? night.stars : 0;
   const sparks = dark ? frame.sparkles : null;
-  const { stirred, vx, vy, dx, dy } = air;
-  const airGlow = air.glow;
-  const top = RAMP.length - 1;
-  const across = Float64Array.from({ length: cols }, (_, c) => Math.sin(c * 0.09 + t * 0.3));
-  const downs = Float64Array.from({ length: rows }, (_, r) => Math.sin(r * 0.15 - t * 0.23));
-  const cellAt = cells.at(t, theme);
-
-  let n = 0;
-  for (let r = 0; r < rows; r++) {
-    if (r >= faintRow && half !== EVERY_ROW && (r & 1) !== half) {
-      continue;
-    }
+  const across = Float64Array.from({ length: columns }, (_, c) =>
+    Math.sin(c * BAND.across + t * BAND.acrossSpeed),
+  );
+  const shared = {
+    grid,
+    frame,
+    air,
+    cellAt: cells.at(t, theme),
+    t,
+    glow: dark ? frame.night.glow : GLOW[theme],
+    windTint: WIND_TINT[theme],
+    stars: dark ? frame.night.stars : 0,
+    sparks,
+    across,
+  };
+  const skipped = (r: number) => r >= faintRow && half !== EVERY_ROW && (r & 1) !== half;
+  return range(rows).reduce((changes, r) => {
     const offTurn = every > 1 && half !== EVERY_ROW && r % every !== turn;
-    if (offTurn && !stirred && !sparks?.touchedRows[r]) {
-      continue;
+    if (skipped(r) || (offTurn && !air.stirred && !sparks?.touchedRows[r])) {
+      return changes;
     }
-    const y = r * ch;
-    const down = downs[r];
-    for (let c = 0; c < cols; c++) {
-      const k = r * cols + c;
-      if (offTurn && !seenAt(air, k) && !sparks?.touched[k]) {
-        continue;
-      }
-      const o = k * 4;
-      const was = shown[k];
-      const drawn = cellAt(
-        originX + c * cw + skyX,
-        y,
-        cw,
-        ch,
-        out,
-        was >= 0 ? was : -1,
-        stirred ? dx[k] : 0,
-        stirred ? dy[k] : 0,
-      );
-      let code = drawn;
-      let alpha = 1;
-      if (drawn === OPEN_SKY) {
-        const breathe = 0.5 + 0.5 * sine(t * breath[k * 2 + 1] + breath[k * 2]);
-        const band = 0.93 + 0.07 * across[c] * down;
-        alpha = (0.9 + 0.1 * breathe) * band;
-        out[7] *= band;
-        code = RAMP[(out[3] * top + 0.5) | 0];
-        if (stars > 0) {
-          const sc = Math.floor((originX + c * cw + skyX) / cw);
-          if (starAt(sc, r, stars)) {
-            code = STAR[(hash(sc, r, 103) * STAR.length) | 0];
-            const twinkle = 0.5 + 0.5 * sine(t * 2.2 * breath[k * 2 + 1] + breath[k * 2]);
-            alpha = 0.35 + 0.65 * twinkle;
-            paint(out, night.star);
-          }
-        }
-        if (sparks) {
-          const spark = sparks.code[k];
-          sparks.touched[k] = 0;
-          if (spark >= 0) {
-            code = spark;
-            paint(out, TINTS[sparks.tint[k]]);
-            alpha = 1;
-          }
-        }
-        const g = stirred ? Math.min(1, airGlow[k]) : 0;
-        if (g > UNLIT) {
-          alpha += (1 - alpha) * g;
-          const m = Math.min(1, g * windTint.glyph);
-          for (let j = 0; j < 3; j++) {
-            out[j] += (glow[j] - out[j]) * m;
-            out[4 + j] += (glow[j] - out[4 + j]) * g * windTint.tile;
-          }
-          const wx = vx[k];
-          const wy = vy[k];
-          if (g > STREAK.glow && Math.abs(wx) + Math.abs(wy) > STREAK.speed) {
-            code = streak(wx, wy, g);
-          }
-        }
-      }
-      colours[o] = out[0];
-      colours[o + 1] = out[1];
-      colours[o + 2] = out[2];
-      colours[o + 3] = code < 0 ? 0 : (alpha * 255 + 0.5) | 0;
-      tiles[o] = out[4];
-      tiles[o + 1] = out[5];
-      tiles[o + 2] = out[6];
-      tiles[o + 3] = (out[7] * 255 + 0.5) | 0;
-      if (code !== shown[k]) {
-        shown[k] = code;
-        changed[n++] = k;
-      }
-    }
+    const down = Math.sin(r * BAND.down - t * BAND.downSpeed);
+    const next = shadeRow({ ...shared, down }, r, offTurn, changes);
     if (sparks) {
       sparks.touchedRows[r] = 0;
     }
-  }
-  return n;
+    return next;
+  }, 0);
 };

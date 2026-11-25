@@ -44,7 +44,6 @@
         "noIncrementDecrement": "off",
         "noInlineStyles": "off",
         "noJsxLiterals": "off",
-        "noMagicNumbers": "off",
         "noTernary": "off",
         "useConsistentTypeDefinitions": {
           "level": "error",
@@ -86,6 +85,16 @@
           },
           "performance": {
             "noAwaitInLoops": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noMagicNumbers": "off"
           }
         }
       }

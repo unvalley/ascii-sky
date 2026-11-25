@@ -42,8 +42,8 @@ const sky = (near: CloudLayer, far = layer(0)) => {
     still: {
       columns,
       rows,
-      cw: 6,
-      ch: 10,
+      cellWidth: 6,
+      cellHeight: 10,
       text: Array.from({ length: rows }, () => SKY_RAMP[4].repeat(columns)).join("\n"),
       rgb: { light: rgb, dark: rgb, sunset: rgb },
     },
@@ -306,7 +306,7 @@ describe("sunsetColours", () => {
   test("the page's gradient has the same stops", () => {
     const css = sunsetGradient();
     assert.ok(
-      SUNSET_STOPS.every(([y, c]) => css.includes(`${c} ${y}px`)),
+      SUNSET_STOPS.every(({ at: y, colour }) => css.includes(`${colour} ${y}px`)),
       css,
     );
   });

@@ -18,7 +18,7 @@ import { STEP } from "./engine.ts";
 const CW = 8;
 const CH = 12;
 const at = (air: ReturnType<typeof createAir>, x: number, y: number) =>
-  Math.floor(y / CH) * air.cols + Math.floor(x / CW);
+  Math.floor(y / CH) * air.columns + Math.floor(x / CW);
 const still = (a: Float32Array) => a.every((v) => v === 0);
 const settle = (air: ReturnType<typeof createAir>, seconds: number) => {
   range(Math.ceil(seconds / STEP)).forEach(() => {
@@ -57,7 +57,7 @@ describe("lively air", () => {
         return;
       }
       stepAir(air, STEP);
-      const any = range(air.cols * air.rows).some((k) => seenAt(air, k));
+      const any = range(air.columns * air.rows).some((k) => seenAt(air, k));
       assert.equal(air.lively, any, `step ${s}`);
     });
   });
@@ -120,7 +120,7 @@ describe("air", () => {
     puff(air, x, y);
     assert.equal(air.stirred, true);
     const away = (k: number) =>
-      Math.hypot(((k % air.cols) + 0.5) * CW - x, (Math.floor(k / air.cols) + 0.5) * CH - y);
+      Math.hypot(((k % air.columns) + 0.5) * CW - x, (Math.floor(k / air.columns) + 0.5) * CH - y);
     const out = () =>
       air.glow.reduce((sum, g, k) => sum + g * away(k), 0) /
       air.glow.reduce((sum, g) => sum + g, 0);
@@ -138,8 +138,8 @@ describe("air", () => {
     settle(air, STEP * 12);
     const sum = (field: Float32Array, where: (k: number) => boolean) =>
       field.reduce((total, v, k) => (where(k) ? total + v : total), 0);
-    const west = (k: number) => ((k % air.cols) + 0.5) * CW < x;
-    const north = (k: number) => (Math.floor(k / air.cols) + 0.5) * CH < y;
+    const west = (k: number) => ((k % air.columns) + 0.5) * CW < x;
+    const north = (k: number) => (Math.floor(k / air.columns) + 0.5) * CH < y;
     const left = sum(air.vx, west);
     const right = sum(air.vx, (k) => !west(k));
     const up = sum(air.vy, north);
@@ -217,7 +217,7 @@ describe("air", () => {
     const resized = fitAir(air, 40, 30, 9, 13.5);
     assert.equal(resized.vx, air.vx);
     assert.equal(resized.stirred, true);
-    assert.equal(resized.cw, 9);
+    assert.equal(resized.cellWidth, 9);
   });
 
   test("starts still on a new grid, remembering the pointer", () => {

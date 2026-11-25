@@ -1,14 +1,16 @@
 import { type Air, blow, calm, createAir, fitAir, puff, stepAir } from "./air.ts";
 import {
+  ALPHA,
   GLYPHS,
   measureGlyph,
   normaliseShapes,
+  RGBA,
   range,
   type SkyCells,
   type SkyTheme,
 } from "./cells.ts";
 import {
-  type Cell,
+  type CellSize,
   createFrame,
   EVERY_ROW,
   type Frame,
@@ -21,11 +23,12 @@ import {
   TURNS,
 } from "./shade.ts";
 
-export const STEP = 1 / 60;
-const MAX_STEPS = 4;
-const MAX_DT = 0.1;
 export const FULL_RATE = 60;
 export const HALF_RATE = 30;
+export const STEP = 1 / FULL_RATE;
+const MAX_STEPS = 4;
+const MAX_DT = 0.1;
+const MS_PER_SECOND = 1000;
 const CALM_RATE = FULL_RATE / TURNS;
 const PACE_FRAMES = 30;
 const SLOW_MS = 8;
@@ -36,7 +39,7 @@ const MOST_DPR = 3;
 export const CONTROLS = "a, button, input, textarea, select, label, [role]";
 
 export const beat = (drawnAt: number, rate: number, now: number): number => {
-  const gap = 1000 / rate;
+  const gap = MS_PER_SECOND / rate;
   const due = drawnAt + gap;
   if (now < due - EARLY_MS) {
     return Number.NaN;
@@ -54,7 +57,7 @@ const owing = (owed: number, steps = 0): Readonly<{ owed: number; steps: number 
 };
 
 const advance = (clock: Clock, now: number, due: number) => {
-  const dt = Math.min(MAX_DT, (now - clock.last) / 1000);
+  const dt = Math.min(MAX_DT, (now - clock.last) / MS_PER_SECOND);
   const { owed, steps } = owing(clock.owed + dt);
   return { clock: { time: clock.time + dt, last: now, owed, drawnAt: due }, dt, steps };
 };
@@ -90,16 +93,16 @@ const PROBE = 100;
 
 type Ink = Readonly<{ up: number; down: number; left: number; right: number }>;
 
-export const fitGlyphs = (ink: Ink, cw: number, ch: number) => {
-  const roomW = cw - GAP - 2 * PAD;
-  const roomH = ch - GAP - 2 * PAD;
+export const fitGlyphs = (ink: Ink, cellWidth: number, cellHeight: number) => {
+  const roomWidth = cellWidth - GAP - 2 * PAD;
+  const roomHeight = cellHeight - GAP - 2 * PAD;
   const wide = ink.left + ink.right;
   const tall = ink.up + ink.down;
-  const k = Math.min(roomW / wide, roomH / tall);
+  const scale = Math.min(roomWidth / wide, roomHeight / tall);
   return {
-    size: PROBE * k,
-    x: GAP + PAD + (roomW - wide * k) / 2 + ink.left * k,
-    y: GAP + PAD + (roomH - tall * k) / 2 + ink.up * k,
+    size: PROBE * scale,
+    x: GAP + PAD + (roomWidth - wide * scale) / 2 + ink.left * scale,
+    y: GAP + PAD + (roomHeight - tall * scale) / 2 + ink.up * scale,
   };
 };
 
@@ -124,18 +127,22 @@ const context2d = (canvas: HTMLCanvasElement, settings?: CanvasRenderingContext2
   return ctx;
 };
 
-type Atlas = Readonly<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; gw: number }>;
+type Atlas = Readonly<{
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  glyphWidth: number;
+}>;
 
-const drawAtlas = (cw: number, ch: number, scale: number): Atlas => {
-  const gw = Math.ceil(cw * scale);
-  const gh = Math.ceil(ch * scale);
+const drawAtlas = (cellWidth: number, cellHeight: number, scale: number): Atlas => {
+  const glyphWidth = Math.ceil(cellWidth * scale);
+  const glyphHeight = Math.ceil(cellHeight * scale);
   const canvas = document.createElement("canvas");
-  canvas.width = gw * GLYPHS.length;
-  canvas.height = gh;
+  canvas.width = glyphWidth * GLYPHS.length;
+  canvas.height = glyphHeight;
   const ctx = context2d(canvas, { willReadFrequently: true });
   ctx.fillStyle = "#fff";
   ctx.textBaseline = "alphabetic";
-  const fit = fitGlyphs(measureInk(ctx), cw, ch);
+  const fit = fitGlyphs(measureInk(ctx), cellWidth, cellHeight);
   ctx.font = `bold ${fit.size * scale}px ${FONT}`;
   const inside = Math.round(GAP * scale);
   const x = Math.round(fit.x * scale);
@@ -143,27 +150,28 @@ const drawAtlas = (cw: number, ch: number, scale: number): Atlas => {
   GLYPHS.forEach((g, i) => {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(i * gw + inside, inside, gw - inside, gh - inside);
+    ctx.rect(i * glyphWidth + inside, inside, glyphWidth - inside, glyphHeight - inside);
     ctx.clip();
-    ctx.fillText(g, i * gw + x, y);
+    ctx.fillText(g, i * glyphWidth + x, y);
     ctx.restore();
   });
-  return { canvas, ctx, gw };
+  return { canvas, ctx, glyphWidth };
 };
 
-export const measureShapes = (cw: number, ch: number): Float32Array => {
-  const { canvas, ctx, gw } = drawAtlas(cw, ch, MEASURE);
-  const gh = canvas.height;
-  const ink = ctx.getImageData(0, 0, canvas.width, gh).data;
+export const measureShapes = (cellWidth: number, cellHeight: number): Float32Array => {
+  const { canvas, ctx, glyphWidth } = drawAtlas(cellWidth, cellHeight, MEASURE);
+  const glyphHeight = canvas.height;
+  const ink = ctx.getImageData(0, 0, canvas.width, glyphHeight).data;
   return normaliseShapes(
     range(GLYPHS.length).map((g) =>
       measureGlyph(
-        Uint8ClampedArray.from({ length: gw * gh }, (_, i) => {
-          const x = i % gw;
-          return ink[(((i - x) / gw) * canvas.width + g * gw + x) * 4 + 3];
+        Uint8ClampedArray.from({ length: glyphWidth * glyphHeight }, (_, i) => {
+          const x = i % glyphWidth;
+          const y = (i - x) / glyphWidth;
+          return ink[(y * canvas.width + g * glyphWidth + x) * RGBA + ALPHA];
         }),
-        gw,
-        gh,
+        glyphWidth,
+        glyphHeight,
       ),
     ),
   );
@@ -185,66 +193,66 @@ type Images = Readonly<{ colours: ImageData; tiles: ImageData }>;
 
 const sizeLayers = (layers: Layers, grid: Grid): Images => {
   const { main, mask, ink, gaps, tint, tiles } = layers;
-  const { pw, ph, cols, rows, dpr, originX, cw, ch } = grid;
+  const { pixelWidth, pixelHeight, columns, rows, dpr, originX, cellWidth, cellHeight } = grid;
   [main, mask, ink, gaps].forEach(({ canvas }) => {
-    canvas.width = pw;
-    canvas.height = ph;
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
   });
   [tint, tiles].forEach(({ canvas }) => {
-    canvas.width = cols;
+    canvas.width = columns;
     canvas.height = rows;
   });
   main.ctx.imageSmoothingEnabled = false;
   ink.ctx.imageSmoothingEnabled = false;
   const line = Math.max(1, Math.round(dpr));
   gaps.ctx.fillStyle = "#000";
-  range(cols + 1).forEach((c) => {
-    gaps.ctx.fillRect(Math.round((originX + c * cw) * dpr), 0, line, ph);
+  range(columns + 1).forEach((c) => {
+    gaps.ctx.fillRect(Math.round((originX + c * cellWidth) * dpr), 0, line, pixelHeight);
   });
   range(rows + 1).forEach((r) => {
-    gaps.ctx.fillRect(0, Math.round(r * ch * dpr), pw, line);
+    gaps.ctx.fillRect(0, Math.round(r * cellHeight * dpr), pixelWidth, line);
   });
   return {
-    colours: tint.ctx.createImageData(cols, rows),
-    tiles: tiles.ctx.createImageData(cols, rows),
+    colours: tint.ctx.createImageData(columns, rows),
+    tiles: tiles.ctx.createImageData(columns, rows),
   };
 };
 
 const stamp = (layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: number) => {
   const mask = layers.mask.ctx;
-  const { cols, left, across, top, down } = grid;
-  for (let n = 0; n < count; n++) {
-    const k = frame.changed[n];
-    const r = (k / cols) | 0;
-    const c = k - r * cols;
-    const x = left[c];
-    const y = top[r];
-    const w = across[c];
-    const h = down[r];
+  const { columns, columnLeft, columnWidth, rowTop, rowHeight } = grid;
+  for (let i = 0; i < count; i++) {
+    const k = frame.changed[i];
+    const r = (k / columns) | 0;
+    const c = k - r * columns;
+    const x = columnLeft[c];
+    const y = rowTop[r];
+    const w = columnWidth[c];
+    const h = rowHeight[r];
     mask.clearRect(x, y, w, h);
     const code = frame.shown[k];
     if (code >= 0) {
-      mask.drawImage(atlas.canvas, code * atlas.gw, 0, w, h, x, y, w, h);
+      mask.drawImage(atlas.canvas, code * atlas.glyphWidth, 0, w, h, x, y, w, h);
     }
   }
 };
 
 const composite = (layers: Layers, grid: Grid, images: Images) => {
   const { main, mask, ink, gaps, tint, tiles } = layers;
-  const { cols, rows, cw, ch, dpr, originX } = grid;
-  const toX = originX * dpr;
-  const toW = cols * cw * dpr;
-  const toH = rows * ch * dpr;
+  const { columns, rows, cellWidth, cellHeight, dpr, originX } = grid;
+  const left = originX * dpr;
+  const width = columns * cellWidth * dpr;
+  const height = rows * cellHeight * dpr;
   tiles.ctx.putImageData(images.tiles, 0, 0);
   main.ctx.globalCompositeOperation = "copy";
-  main.ctx.drawImage(tiles.canvas, 0, 0, cols, rows, toX, 0, toW, toH);
+  main.ctx.drawImage(tiles.canvas, 0, 0, columns, rows, left, 0, width, height);
   main.ctx.globalCompositeOperation = "destination-out";
   main.ctx.drawImage(gaps.canvas, 0, 0);
   tint.ctx.putImageData(images.colours, 0, 0);
   ink.ctx.globalCompositeOperation = "copy";
   ink.ctx.drawImage(mask.canvas, 0, 0);
   ink.ctx.globalCompositeOperation = "source-in";
-  ink.ctx.drawImage(tint.canvas, 0, 0, cols, rows, toX, 0, toW, toH);
+  ink.ctx.drawImage(tint.canvas, 0, 0, columns, rows, left, 0, width, height);
   main.ctx.globalCompositeOperation = "source-over";
   main.ctx.drawImage(ink.canvas, 0, 0);
 };
@@ -281,7 +289,7 @@ export const startSky = (
   canvas: HTMLCanvasElement,
   cells: SkyCells,
   skyWidth: number,
-  cell: Cell,
+  cell: CellSize,
   { theme: chosen = "auto", faintFrom, ignore = CONTROLS, night }: SkyOptions = {},
 ): Sky => {
   const layers = createLayers(canvas);
@@ -312,8 +320,9 @@ export const startSky = (
     if (!sky.view) {
       return false;
     }
-    const { originX, cw, skyX } = sky.view.grid;
-    return starAt(Math.floor((originX + c * cw + skyX) / cw), r, sky.view.frame.night.stars);
+    const { originX, cellWidth, skyOffset } = sky.view.grid;
+    const skyColumn = Math.floor((originX + c * cellWidth + skyOffset) / cellWidth);
+    return starAt(skyColumn, r, sky.view.frame.night.stars);
   };
 
   const draw = (half: number, every = TURNS) => {
@@ -356,12 +365,13 @@ export const startSky = (
       was.width === rect.width &&
       was.height === rect.height &&
       was.dpr === dpr &&
-      was.faint === faint
+      was.faintFrom === faint
     ) {
       return;
     }
     const grid = layoutGrid(rect.width, rect.height, dpr, skyWidth, cell, faint);
-    const atlas = sky.view && was?.dpr === dpr ? sky.view.atlas : drawAtlas(cell.cw, cell.ch, dpr);
+    const atlas =
+      sky.view && was?.dpr === dpr ? sky.view.atlas : drawAtlas(cell.width, cell.height, dpr);
     const images = sizeLayers(layers, grid);
     sky.view = {
       grid,
@@ -369,7 +379,7 @@ export const startSky = (
       images,
       frame: createFrame(grid, images.colours.data, images.tiles.data, night),
     };
-    sky.air = fitAir(sky.air, grid.cols, grid.rows, grid.cw, grid.ch);
+    sky.air = fitAir(sky.air, grid.columns, grid.rows, grid.cellWidth, grid.cellHeight);
     sky.drawn = 0;
     draw(EVERY_ROW);
   };
