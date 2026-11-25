@@ -5,16 +5,14 @@ import {
   calm,
   createAir,
   fitAir,
-  GUST_SIZE,
   laneAt,
   lanesOf,
   MOST_PUSH,
   puff,
-  SEEN,
   seenAt,
   stepAir,
 } from "./air.ts";
-import { STEP } from "./clock.ts";
+import { STEP } from "./engine.ts";
 
 const CW = 8;
 const CH = 12;
@@ -68,10 +66,6 @@ describe("lively air", () => {
     assert.equal(air.lively, true);
     stepAir(air, STEP);
     assert.equal(air.lively, true);
-  });
-
-  test("shows above a pixel or two of push, or any glow", () => {
-    assert.ok(SEEN.push >= 1 && SEEN.glow > 0);
   });
 });
 
@@ -175,13 +169,13 @@ describe("air", () => {
   });
 
   test("every gust comes out in streams with calm between, not as a ring", () => {
-    const lanes = new Float64Array(GUST_SIZE);
+    const lanes = new Float64Array(9);
     for (let seed = 1; seed <= 50; seed++) {
-      lanesOf(seed, lanes, 0);
+      lanesOf(seed, lanes);
       let least = 1;
       let most = 0;
       for (let a = -Math.PI; a < Math.PI; a += 0.01) {
-        const l = laneAt(lanes, 0, a);
+        const l = laneAt(lanes, a);
         least = Math.min(least, l);
         most = Math.max(most, l);
       }
@@ -190,10 +184,10 @@ describe("air", () => {
   });
 
   test("a gust's streams go round the circle without a seam", () => {
-    const lanes = new Float64Array(GUST_SIZE);
+    const lanes = new Float64Array(9);
     for (let seed = 1; seed <= 6; seed++) {
-      lanesOf(seed, lanes, 0);
-      assert.ok(Math.abs(laneAt(lanes, 0, Math.PI - 1e-9) - laneAt(lanes, 0, -Math.PI)) < 1e-6);
+      lanesOf(seed, lanes);
+      assert.ok(Math.abs(laneAt(lanes, Math.PI - 1e-9) - laneAt(lanes, -Math.PI)) < 1e-6);
     }
   });
 
@@ -204,9 +198,7 @@ describe("air", () => {
       settle(air, STEP * 3);
     }
     assert.equal(air.puffs, 7);
-    for (let g = 0; g < air.gusts.length; g += GUST_SIZE) {
-      assert.ok(air.gusts[g + 2] >= 0);
-    }
+    assert.ok(air.gusts.every((g) => g.age >= 0));
   });
 
   test("the same clicks blow the same way", () => {
@@ -243,9 +235,7 @@ describe("air", () => {
     for (const f of [air.vx, air.vy, air.dx, air.dy, air.glow]) {
       assert.ok(still(f));
     }
-    for (let g = 0; g < air.gusts.length; g += GUST_SIZE) {
-      assert.ok(air.gusts[g + 2] < 0);
-    }
+    assert.ok(air.gusts.every((g) => g.age < 0));
   });
 
   test("keeps moving when only the cells' size changes", () => {

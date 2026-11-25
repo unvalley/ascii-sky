@@ -1,11 +1,89 @@
 import { type Air, seenAt } from "./air.ts";
-import { GLYPHS, OPEN_SKY, SKY_RAMP, type SkyCells, type SkyTheme } from "./cells.ts";
-import type { Grid } from "./grid.ts";
-import { hash } from "./hash.ts";
-import { type Sparkles, TINTS } from "./sparkle.ts";
-import { sine } from "./wave.ts";
+import { glyphOf, hash, OPEN_SKY, SKY_RAMP, type SkyCells, type SkyTheme } from "./cells.ts";
 
-export type Theme = SkyTheme;
+const SINE_SIZE = 4096;
+const SINE = new Float64Array(SINE_SIZE + 1);
+for (let i = 0; i <= SINE_SIZE; i++) {
+  SINE[i] = Math.sin((i / SINE_SIZE) * Math.PI * 2);
+}
+const PER_RADIAN = SINE_SIZE / (Math.PI * 2);
+
+export function sine(a: number): number {
+  const turns = a * PER_RADIAN;
+  const at = turns - Math.floor(turns / SINE_SIZE) * SINE_SIZE;
+  const i = at | 0;
+  const v = SINE[i];
+  return v + (SINE[i + 1] - v) * (at - i);
+}
+
+export type Grid = Readonly<{
+  width: number;
+  height: number;
+  dpr: number;
+  pw: number;
+  ph: number;
+  cw: number;
+  ch: number;
+  cols: number;
+  rows: number;
+  originX: number;
+  skyX: number;
+  left: Int32Array;
+  across: Int32Array;
+  top: Int32Array;
+  down: Int32Array;
+  faint: number;
+  faintRow: number;
+}>;
+
+export type Cell = Readonly<{ cw: number; ch: number }>;
+
+export function layoutGrid(
+  width: number,
+  height: number,
+  dpr: number,
+  skyWidth: number,
+  { cw, ch }: Cell,
+  faint = 0,
+): Grid {
+  const half = Math.floor(width / 2 / cw);
+  const originX = width / 2 - half * cw;
+  const cols = half * 2;
+  const rows = Math.ceil(height / ch);
+  const left = new Int32Array(cols);
+  const across = new Int32Array(cols);
+  for (let c = 0; c < cols; c++) {
+    const x = originX + c * cw;
+    left[c] = Math.round(x * dpr);
+    across[c] = Math.round((x + cw) * dpr) - left[c];
+  }
+  const top = new Int32Array(rows);
+  const down = new Int32Array(rows);
+  for (let r = 0; r < rows; r++) {
+    const y = r * ch;
+    top[r] = Math.round(y * dpr);
+    down[r] = Math.round((y + ch) * dpr) - top[r];
+  }
+  return {
+    width,
+    height,
+    dpr,
+    pw: Math.round(width * dpr),
+    ph: Math.round(height * dpr),
+    cw,
+    ch,
+    cols,
+    rows,
+    originX,
+    skyX: skyWidth / 2 - width / 2,
+    left,
+    across,
+    top,
+    down,
+    faint,
+    faintRow: faint > 0 ? Math.min(rows, Math.ceil(faint / ch)) : rows,
+  };
+}
 
 const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], vice: [0, 190, 230] } as const;
 const WIND_TINT = {
@@ -17,24 +95,206 @@ const STREAK = { glow: 0.28, speed: 50 };
 const GUSTY = 0.7;
 const LEVEL = 2.4;
 const UNLIT = 0.02;
-const glyph = (g: string) => GLYPHS.indexOf(g);
-const ALONG = glyph("-");
-const GUST = glyph("~");
-const UP = glyph("|");
-const RISING = glyph("/");
-const FALLING = glyph("\\");
-const RAMP = [...SKY_RAMP].map(glyph);
+const ALONG = glyphOf("-");
+const GUST = glyphOf("~");
+const UP = glyphOf("|");
+const RISING = glyphOf("/");
+const FALLING = glyphOf("\\");
+const RAMP = [...SKY_RAMP].map(glyphOf);
+const STAR = [...".......++*"].map(glyphOf);
 export const TURNS = 3;
+export const EVERY_ROW = -1;
+export const UNDRAWN = -2;
+
 export type Stars = Readonly<{
   stars: number;
   star: readonly number[];
   glow: readonly number[];
   sparkle?: boolean;
 }>;
+
+export const NIGHT: Stars = {
+  stars: 0.03,
+  star: [255, 246, 216],
+  glow: [176, 200, 255],
+  sparkle: true,
+};
 const NO_STARS: Stars = { stars: 0, star: [255, 255, 255], glow: GLOW.dark };
-const STAR = [".", ".", ".", ".", ".", ".", ".", "+", "+", "*"].map(glyph);
+
 export const starAt = (sc: number, r: number, share: number): boolean => hash(sc, r, 101) < share;
-export const UNDRAWN = -2;
+
+export const TICK = 0.09;
+export const MOST = { big: 4, small: 12 };
+export const TINTS = [
+  [255, 255, 255],
+  [253, 230, 138],
+  [224, 247, 255],
+] as const;
+
+type Step = readonly (readonly [number, number, number])[];
+
+const SMALL: readonly Step[] = [...".+*+."].map((s) => [[0, 0, glyphOf(s)]] as const);
+const BIG: readonly Step[] = [
+  [[0, 0, glyphOf(".")]],
+  [[0, 0, glyphOf("+")]],
+  [
+    [0, 0, glyphOf("*")],
+    [-1, 0, glyphOf("-")],
+    [1, 0, glyphOf("-")],
+    [0, -1, glyphOf("|")],
+    [0, 1, glyphOf("|")],
+  ],
+  [
+    [0, 0, glyphOf("*")],
+    [-1, 0, glyphOf("-")],
+    [1, 0, glyphOf("-")],
+    [-2, 0, glyphOf(".")],
+    [2, 0, glyphOf(".")],
+    [0, -1, glyphOf("|")],
+    [0, 1, glyphOf("|")],
+  ],
+  [
+    [0, 0, glyphOf("+")],
+    [-1, 0, glyphOf("-")],
+    [1, 0, glyphOf("-")],
+    [0, -1, glyphOf("'")],
+    [0, 1, glyphOf(".")],
+  ],
+  [[0, 0, glyphOf("+")]],
+  [[0, 0, glyphOf(".")]],
+];
+
+type Sparkle = { steps: readonly Step[] | null; age: number; c: number; r: number; tint: number };
+
+export type Sparkles = {
+  readonly cols: number;
+  readonly rows: number;
+  readonly code: Int16Array;
+  readonly tint: Uint8Array;
+  readonly touched: Uint8Array;
+  readonly touchedRows: Uint8Array;
+  readonly pool: Sparkle[];
+  owed: number;
+};
+
+export function createSparkles(cols: number, rows: number): Sparkles {
+  return {
+    cols,
+    rows,
+    code: new Int16Array(cols * rows).fill(-1),
+    tint: new Uint8Array(cols * rows),
+    touched: new Uint8Array(cols * rows),
+    touchedRows: new Uint8Array(rows),
+    pool: Array.from({ length: MOST.big + MOST.small }, () => ({
+      steps: null,
+      age: 0,
+      c: 0,
+      r: 0,
+      tint: 0,
+    })),
+    owed: 0,
+  };
+}
+
+function lay(sp: Sparkles, s: Sparkle, on: boolean) {
+  const step = s.steps?.[s.age];
+  if (!step) {
+    return;
+  }
+  for (const [dc, dr, glyph] of step) {
+    const c = s.c + dc;
+    const r = s.r + dr;
+    if (c < 0 || r < 0 || c >= sp.cols || r >= sp.rows) {
+      continue;
+    }
+    const k = r * sp.cols + c;
+    sp.code[k] = on ? glyph : -1;
+    sp.tint[k] = s.tint;
+    sp.touched[k] = 1;
+    sp.touchedRows[r] = 1;
+  }
+}
+
+function crowded(sp: Sparkles, steps: readonly Step[], c: number, r: number) {
+  const reach = steps === BIG ? 2 : 0;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -reach; dc <= reach; dc++) {
+      const cc = c + dc;
+      const rr = r + dr;
+      if (cc < 0 || rr < 0 || cc >= sp.cols || rr >= sp.rows || sp.code[rr * sp.cols + cc] >= 0) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function spawn(
+  sp: Sparkles,
+  steps: readonly Step[],
+  rows: number,
+  isStar: (c: number, r: number) => boolean,
+  random: () => number,
+) {
+  const free = sp.pool.find((s) => !s.steps);
+  if (!free) {
+    return;
+  }
+  for (let tries = 0; tries < 24; tries++) {
+    const c = 2 + Math.floor(random() * (sp.cols - 4));
+    const r = 1 + Math.floor(random() * Math.max(1, Math.min(rows, sp.rows) - 2));
+    if (!isStar(c, r) || crowded(sp, steps, c, r)) {
+      continue;
+    }
+    free.steps = steps;
+    free.age = 0;
+    free.c = c;
+    free.r = r;
+    free.tint = Math.floor(random() * TINTS.length);
+    lay(sp, free, true);
+    return;
+  }
+}
+
+export function stepSparkles(
+  sp: Sparkles,
+  dt: number,
+  rows: number,
+  isStar: (c: number, r: number) => boolean,
+  random: () => number = Math.random,
+): void {
+  sp.owed += dt;
+  while (sp.owed >= TICK) {
+    sp.owed -= TICK;
+    let big = 0;
+    let small = 0;
+    for (const s of sp.pool) {
+      if (!s.steps) {
+        continue;
+      }
+      lay(sp, s, false);
+      s.age++;
+      if (s.age >= s.steps.length) {
+        s.steps = null;
+        continue;
+      }
+      lay(sp, s, true);
+      if (s.steps === BIG) {
+        big++;
+      } else {
+        small++;
+      }
+    }
+    if (big < MOST.big && random() < 0.35) {
+      spawn(sp, BIG, rows, isStar, random);
+    }
+    for (let i = 0; i < 2; i++) {
+      if (small < MOST.small && random() < 0.6) {
+        spawn(sp, SMALL, rows, isStar, random);
+      }
+    }
+  }
+}
 
 export type Frame = Readonly<{
   colours: Uint8ClampedArray;
@@ -45,12 +305,15 @@ export type Frame = Readonly<{
   bandAcross: Float64Array;
   bandDown: Float64Array;
   out: number[];
+  night: Stars;
+  sparkles: Sparkles | null;
 }>;
 
 export function createFrame(
   grid: Grid,
   colours: Uint8ClampedArray,
   tiles: Uint8ClampedArray,
+  night: Stars = NO_STARS,
 ): Frame {
   const { cols, rows } = grid;
   return {
@@ -62,6 +325,8 @@ export function createFrame(
     bandAcross: new Float64Array(cols),
     bandDown: new Float64Array(rows),
     out: [0, 0, 0, 0, 0, 0, 0, 0],
+    night,
+    sparkles: night.sparkle ? createSparkles(cols, rows) : null,
   };
 }
 
@@ -89,30 +354,25 @@ export function streak(vx: number, vy: number, glow: number): number {
   return vx * vy < 0 ? RISING : FALLING;
 }
 
-export const EVERY_ROW = -1;
-
 export function shadeFrame(
   grid: Grid,
   cells: SkyCells,
   air: Air,
   frame: Frame,
   t: number,
-  theme: Theme,
+  theme: SkyTheme,
   half: number = EVERY_ROW,
   every = 1,
   turn = 0,
-  night: Stars = NO_STARS,
-  sparkles: Sparkles | null = null,
 ): number {
   const { cols, rows, cw, ch, originX, skyX, faintRow } = grid;
-  const { colours, tiles, shown, changed, breath, bandAcross, bandDown, out } = frame;
+  const { colours, tiles, shown, changed, breath, bandAcross, bandDown, out, night } = frame;
   const dark = theme === "dark";
   const glow = dark ? night.glow : GLOW[theme];
   const windTint = WIND_TINT[theme];
   const stars = dark ? night.stars : 0;
-  const sparks = dark ? sparkles : null;
-  const stirred = air.stirred;
-  const { vx, vy, dx, dy } = air;
+  const sparks = dark ? frame.sparkles : null;
+  const { stirred, vx, vy, dx, dy } = air;
   const airGlow = air.glow;
   const top = RAMP.length - 1;
   for (let c = 0; c < cols; c++) {
@@ -188,11 +448,7 @@ export function shadeFrame(
           const m = Math.min(1, g * windTint.glyph);
           for (let j = 0; j < 3; j++) {
             out[j] += (glow[j] - out[j]) * m;
-          }
-          if (windTint.tile > 0) {
-            for (let j = 0; j < 3; j++) {
-              out[4 + j] += (glow[j] - out[4 + j]) * g * windTint.tile;
-            }
+            out[4 + j] += (glow[j] - out[4 + j]) * g * windTint.tile;
           }
           const wx = vx[k];
           const wy = vy[k];

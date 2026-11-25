@@ -2,9 +2,22 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { createAir } from "./air.ts";
 import { GLYPHS, OPEN_SKY, SKY_RAMP, type SkyCells } from "./cells.ts";
-import { layoutGrid } from "./grid.ts";
-import { breathing, createFrame, EVERY_ROW, shadeFrame, streak, UNDRAWN } from "./shade.ts";
-import { createSparkles, TINTS } from "./sparkle.ts";
+import {
+  breathing,
+  createFrame,
+  createSparkles,
+  EVERY_ROW,
+  layoutGrid,
+  MOST,
+  type Stars,
+  shadeFrame,
+  sine,
+  stepSparkles,
+  streak,
+  TICK,
+  TINTS,
+  UNDRAWN,
+} from "./shade.ts";
 
 const CELL = { cw: 6, ch: 9.75 };
 const CLOUD = GLYPHS.indexOf("8");
@@ -34,10 +47,10 @@ function fakeCells(density: number, cloudFrom = Number.POSITIVE_INFINITY) {
   return { cells, seen };
 }
 
-function setup(width = 400, height = 240, faint = 0) {
+function setup(width = 400, height = 240, faint = 0, night?: Stars) {
   const grid = layoutGrid(width, height, 1, width, CELL, faint);
   const n = grid.cols * grid.rows * 4;
-  const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n));
+  const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n), night);
   const air = createAir(grid.cols, grid.rows, grid.cw, grid.ch);
   return { grid, frame, air };
 }
@@ -222,16 +235,17 @@ describe("night", () => {
   const night = { stars: 0, star: [255, 246, 216], glow: [176, 200, 255], sparkle: true };
 
   test("draws a sparkle over open sky on the dark page, even when its row isn't due", () => {
-    const { grid, frame, air } = setup(400, 240);
+    const { grid, frame, air } = setup(400, 240, 0, night);
     const { cells } = fakeCells(0.5);
-    const sp = createSparkles(grid.cols, grid.rows);
-    shadeFrame(grid, cells, air, frame, 0, "dark", EVERY_ROW, 3, 0, night, sp);
+    const sp = frame.sparkles;
+    assert.ok(sp);
+    shadeFrame(grid, cells, air, frame, 0, "dark", EVERY_ROW, 3, 0);
     const k = Number(grid.cols) + 4;
     sp.code[k] = GLYPHS.indexOf("*");
     sp.tint[k] = 1;
     sp.touched[k] = 1;
     sp.touchedRows[1] = 1;
-    shadeFrame(grid, cells, air, frame, 0, "dark", 0, 3, 0, night, sp);
+    shadeFrame(grid, cells, air, frame, 0, "dark", 0, 3, 0);
     assert.equal(frame.shown[k], GLYPHS.indexOf("*"));
     assert.deepEqual([...frame.colours.subarray(k * 4, k * 4 + 4)], [...TINTS[1], 255]);
     assert.equal(sp.touched[k], 0);
@@ -239,13 +253,14 @@ describe("night", () => {
   });
 
   test("shows no sparkles on the light page, or over a cloud", () => {
-    const { grid, frame, air } = setup(400, 240);
-    const sp = createSparkles(grid.cols, grid.rows);
+    const { grid, frame, air } = setup(400, 240, 0, night);
+    const sp = frame.sparkles;
+    assert.ok(sp);
     const k = grid.cols - 1;
     sp.code[k] = GLYPHS.indexOf("*");
-    shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light", EVERY_ROW, 3, 0, night, sp);
+    shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light", EVERY_ROW, 3, 0);
     assert.equal(frame.shown[k], sky(0.5));
-    shadeFrame(grid, fakeCells(0.5, 0).cells, air, frame, 0, "dark", EVERY_ROW, 3, 0, night, sp);
+    shadeFrame(grid, fakeCells(0.5, 0).cells, air, frame, 0, "dark", EVERY_ROW, 3, 0);
     assert.equal(frame.shown[k], CLOUD);
   });
 });
@@ -274,5 +289,163 @@ describe("breathing", () => {
       assert.ok(a[i + 1] >= 0.25 && a[i + 1] < 1.15 + 1e-6);
     }
     assert.ok(new Set(a).size > a.length * 0.9);
+  });
+});
+
+const SKY = 2400;
+
+describe("layoutGrid", () => {
+  for (const [width, dpr] of [
+    [1440, 2],
+    [390, 2],
+    [1366.5, 1],
+    [822, 3],
+  ] as const) {
+    const g = layoutGrid(width, 700, dpr, SKY, CELL);
+
+    test(`${width} px: cells are the size asked for`, () => {
+      assert.equal(g.cw, CELL.cw);
+      assert.equal(g.ch, CELL.ch);
+    });
+
+    test(`${width} px: the grid is whole cells inside the canvas, centred`, () => {
+      assert.ok(g.originX >= 0 && g.originX < g.cw);
+      assert.ok(g.originX + g.cols * g.cw <= width);
+      assert.ok(Math.abs(g.originX + (g.cols * g.cw) / 2 - width / 2) < 1e-9);
+      assert.ok(g.rows * g.ch >= 700 && (g.rows - 1) * g.ch < 700);
+    });
+
+    test(`${width} px: cells tile the canvas without gaps or overlaps`, () => {
+      for (let c = 0; c + 1 < g.cols; c++) {
+        assert.equal(g.left[c] + g.across[c], g.left[c + 1]);
+      }
+      for (let r = 0; r + 1 < g.rows; r++) {
+        assert.equal(g.top[r] + g.down[r], g.top[r + 1]);
+      }
+    });
+
+    test(`${width} px: the still sky is centred`, () => {
+      assert.equal(g.skyX + width / 2, SKY / 2);
+    });
+  }
+
+  test("turns faint from the first row wholly below the faint line", () => {
+    const g = layoutGrid(390, 700, 2, SKY, CELL, 280);
+    assert.ok(g.faintRow * g.ch >= 280 && (g.faintRow - 1) * g.ch < 280);
+  });
+
+  test("with no faint line, no row is faint", () => {
+    const g = layoutGrid(1440, 700, 2, SKY, CELL);
+    assert.equal(g.faintRow, g.rows);
+  });
+
+  test("the backing store is the canvas in device pixels", () => {
+    const g = layoutGrid(1440, 700, 2, SKY, CELL);
+    assert.equal(g.pw, 2880);
+    assert.equal(g.ph, 1400);
+  });
+});
+
+function seeded(seed = 1) {
+  let s = seed;
+  return () => {
+    s = (s * 1_664_525 + 1_013_904_223) >>> 0;
+    return s / 4_294_967_296;
+  };
+}
+const shown = (code: Int16Array) => [...code].filter((c) => c >= 0).length;
+
+describe("sparkles", () => {
+  test("come out only on stars, within the rows asked for", () => {
+    const sp = createSparkles(60, 40);
+    const random = seeded(3);
+    const star = (c: number, r: number) => (c * 7 + r * 13) % 11 === 0;
+    for (let i = 0; i < 40; i++) {
+      stepSparkles(sp, TICK, 20, star, random);
+    }
+    for (const s of sp.pool) {
+      if (!s.steps) {
+        continue;
+      }
+      assert.ok(star(s.c, s.r));
+      assert.ok(s.r >= 1 && s.r < 20);
+    }
+    assert.ok(shown(sp.code) > 0);
+  });
+
+  test("never more than so many at once", () => {
+    const sp = createSparkles(80, 40);
+    const random = seeded(5);
+    for (let i = 0; i < 200; i++) {
+      stepSparkles(sp, TICK, 40, () => true, random);
+      assert.ok(sp.pool.filter((s) => s.steps).length <= MOST.big + MOST.small);
+    }
+  });
+
+  test("glint and go: with no stars nothing new starts, and the rest goes out", () => {
+    const sp = createSparkles(60, 30);
+    const random = seeded(7);
+    for (let i = 0; i < 20; i++) {
+      stepSparkles(sp, TICK, 30, () => true, random);
+    }
+    assert.ok(shown(sp.code) > 0);
+    for (let i = 0; i < 20; i++) {
+      stepSparkles(sp, TICK, 30, () => false, random);
+    }
+    assert.equal(shown(sp.code), 0);
+    assert.ok(sp.pool.every((s) => !s.steps));
+  });
+
+  test("mark the cells, and their rows, whose glyph changed", () => {
+    const sp = createSparkles(60, 30);
+    stepSparkles(sp, TICK, 30, () => true, seeded(9));
+    const drawn = [...sp.code.keys()].filter((k) => sp.code[k] >= 0);
+    assert.ok(drawn.length > 0);
+    for (const k of drawn) {
+      assert.equal(sp.touched[k], 1);
+      assert.equal(sp.touchedRows[Math.floor(k / sp.cols)], 1);
+    }
+  });
+
+  test("draw a sparkle's glyphs", () => {
+    const sp = createSparkles(60, 30);
+    const random = seeded(11);
+    const seen = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      stepSparkles(sp, TICK, 30, () => true, random);
+      for (const c of sp.code) {
+        if (c >= 0) {
+          seen.add(GLYPHS[c]);
+        }
+      }
+    }
+    for (const glyph of [".", "+", "*", "-", "|"]) {
+      assert.ok(seen.has(glyph), glyph);
+    }
+  });
+
+  test("wait for a whole tick before moving", () => {
+    const sp = createSparkles(60, 30);
+    stepSparkles(sp, TICK / 2, 30, () => true, seeded(13));
+    assert.equal(shown(sp.code), 0);
+    stepSparkles(sp, TICK / 2, 30, () => true, seeded(13));
+    assert.ok(shown(sp.code) > 0);
+  });
+});
+
+describe("sine", () => {
+  test("is within 3e-7 of Math.sin, near and far from 0, either side", () => {
+    let worst = 0;
+    for (const base of [0, 1e3, 1e5, -50]) {
+      for (let a = base; a < base + 20; a += 0.0007) {
+        worst = Math.max(worst, Math.abs(sine(a) - Math.sin(a)));
+      }
+    }
+    assert.ok(worst < 3e-7, `worst ${worst}`);
+  });
+
+  test("is exact where the table is", () => {
+    assert.equal(sine(0), 0);
+    assert.equal(sine(Math.PI / 2), 1);
   });
 });

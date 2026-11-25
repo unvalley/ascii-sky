@@ -1,4 +1,4 @@
-import { hash } from "./hash.ts";
+import { hash, smooth } from "./cells.ts";
 
 const WIND_LIFE = 0.45;
 const GLOW_LIFE = 0.7;
@@ -12,14 +12,11 @@ const GUST = { reach: 128, life: 0.8, band: 11, speed: 320, glow: 0.45, lanes: 9
 const SPREAD_CELL = 8;
 const SETTLE = { wind: 0.7, glow: 0.82 };
 const MOST_GUSTS = 4;
-const GUST_X = 0;
-const GUST_Y = 1;
-const GUST_AGE = 2;
-const GUST_LANES = 3;
-export const GUST_SIZE = GUST_LANES + GUST.lanes;
 const MOST_GLOW = 1.2;
 const STILL = 0.05;
-export const SEEN = { glow: 0.02, push: 2 };
+const SEEN = { glow: 0.02, push: 2 };
+
+type Gust = { x: number; y: number; age: number; readonly lanes: Float64Array };
 
 export type Air = {
   readonly cols: number;
@@ -33,7 +30,7 @@ export type Air = {
   readonly glow: Float32Array;
   readonly spare: Float32Array;
   readonly pointer: { x: number; y: number; t: number; on: boolean };
-  readonly gusts: Float64Array;
+  readonly gusts: readonly Gust[];
   puffs: number;
   stirred: boolean;
   lively: boolean;
@@ -53,7 +50,12 @@ export function createAir(cols: number, rows: number, cw: number, ch: number): A
     glow: new Float32Array(n),
     spare: new Float32Array(n),
     pointer: { x: 0, y: 0, t: 0, on: false },
-    gusts: new Float64Array(MOST_GUSTS * GUST_SIZE).fill(-1),
+    gusts: Array.from({ length: MOST_GUSTS }, () => ({
+      x: 0,
+      y: 0,
+      age: -1,
+      lanes: new Float64Array(GUST.lanes),
+    })),
     puffs: 0,
     stirred: false,
     lively: false,
@@ -65,32 +67,6 @@ export function fitAir(air: Air, cols: number, rows: number, cw: number, ch: num
     return cw === air.cw && ch === air.ch ? air : { ...air, cw, ch };
   }
   return { ...createAir(cols, rows, cw, ch), pointer: air.pointer };
-}
-
-function around(
-  air: Air,
-  x: number,
-  y: number,
-  reach: number,
-  visit: (w: number, i: number, c: number, r: number) => void,
-) {
-  const { cols, rows, cw, ch } = air;
-  const c0 = Math.floor(x / cw);
-  const r0 = Math.floor(y / ch);
-  const down = Math.ceil((reach * cw) / ch);
-  const r1 = Math.min(rows - 1, r0 + down);
-  const c1 = Math.min(cols - 1, c0 + reach);
-  for (let r = Math.max(0, r0 - down); r <= r1; r++) {
-    for (let c = Math.max(0, c0 - reach); c <= c1; c++) {
-      const d = Math.hypot(((c + 0.5) * cw - x) / cw, ((r + 0.5) * ch - y) / cw);
-      if (d > reach + 0.5) {
-        continue;
-      }
-      visit((1 - d / (reach + 1)) ** 2, r * cols + c, c, r);
-    }
-  }
-  air.stirred = true;
-  air.lively = true;
 }
 
 export function blow(air: Air, x: number, y: number, t: number): void {
@@ -105,12 +81,28 @@ export function blow(air: Air, x: number, y: number, t: number): void {
       sy *= MOST_SPEED / speed;
     }
     const lift = Math.min(1, speed / BRIGHT_SPEED);
-    const { vx, vy, glow } = air;
-    around(air, x, y, Math.max(1, Math.round(REACH / air.cw)), (w, i) => {
-      vx[i] += (sx * DRAG - vx[i]) * w;
-      vy[i] += (sy * DRAG - vy[i]) * w;
-      glow[i] = Math.min(MOST_GLOW, glow[i] + w * lift);
-    });
+    const { cols, rows, cw, ch, vx, vy, glow } = air;
+    const reach = Math.max(1, Math.round(REACH / cw));
+    const c0 = Math.floor(x / cw);
+    const r0 = Math.floor(y / ch);
+    const down = Math.ceil((reach * cw) / ch);
+    const r1 = Math.min(rows - 1, r0 + down);
+    const c1 = Math.min(cols - 1, c0 + reach);
+    for (let r = Math.max(0, r0 - down); r <= r1; r++) {
+      for (let c = Math.max(0, c0 - reach); c <= c1; c++) {
+        const d = Math.hypot(((c + 0.5) * cw - x) / cw, ((r + 0.5) * ch - y) / cw);
+        if (d > reach + 0.5) {
+          continue;
+        }
+        const w = (1 - d / (reach + 1)) ** 2;
+        const i = r * cols + c;
+        vx[i] += (sx * DRAG - vx[i]) * w;
+        vy[i] += (sy * DRAG - vy[i]) * w;
+        glow[i] = Math.min(MOST_GLOW, glow[i] + w * lift);
+      }
+    }
+    air.stirred = true;
+    air.lively = true;
   }
   last.x = x;
   last.y = y;
@@ -123,61 +115,51 @@ export function calm(air: Air): void {
 }
 
 export function puff(air: Air, x: number, y: number): void {
-  const { gusts } = air;
-  let at = 0;
-  for (let g = 0; g < MOST_GUSTS; g++) {
-    const age = gusts[g * GUST_SIZE + GUST_AGE];
-    if (age < 0) {
-      at = g;
+  let gust = air.gusts[0];
+  for (const g of air.gusts) {
+    if (g.age < 0) {
+      gust = g;
       break;
     }
-    if (age > gusts[at * GUST_SIZE + GUST_AGE]) {
-      at = g;
+    if (g.age > gust.age) {
+      gust = g;
     }
   }
-  const o = at * GUST_SIZE;
-  gusts[o + GUST_X] = x;
-  gusts[o + GUST_Y] = y;
-  gusts[o + GUST_AGE] = 0;
-  lanesOf(++air.puffs, gusts, o + GUST_LANES);
+  gust.x = x;
+  gust.y = y;
+  gust.age = 0;
+  lanesOf(++air.puffs, gust.lanes);
   air.stirred = true;
   air.lively = true;
 }
 
-const smooth = (a: number, b: number, t: number) => {
-  const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
-  return x * x * (3 - 2 * x);
-};
-
-export function lanesOf(seed: number, out: Float64Array, at: number): void {
+export function lanesOf(seed: number, lanes: Float64Array): void {
   let least = 1;
   let most = 0;
   for (let k = 0; k < GUST.lanes; k++) {
     const h = hash(k, seed, 71);
-    out[at + k] = h;
+    lanes[k] = h;
     least = Math.min(least, h);
     most = Math.max(most, h);
   }
   for (let k = 0; k < GUST.lanes; k++) {
-    out[at + k] = smooth(0.25, 0.75, (out[at + k] - least) / (most - least || 1));
+    lanes[k] = smooth(0.25, 0.75, (lanes[k] - least) / (most - least || 1));
   }
 }
 
-export function laneAt(lanes: Float64Array, at: number, angle: number): number {
+export function laneAt(lanes: Float64Array, angle: number): number {
   const p = (angle / (Math.PI * 2) + 1) * GUST.lanes;
   const i = Math.floor(p);
   const f = p - i;
-  const a = lanes[at + (i % GUST.lanes)];
-  const b = lanes[at + ((i + 1) % GUST.lanes)];
+  const a = lanes[i % GUST.lanes];
+  const b = lanes[(i + 1) % GUST.lanes];
   return a + (b - a) * f * f * (3 - 2 * f);
 }
 
-function blowFront(air: Air, g: number) {
-  const { cols, rows, cw, ch, vx, vy, glow, gusts } = air;
-  const o = g * GUST_SIZE;
-  const gx = gusts[o + GUST_X];
-  const gy = gusts[o + GUST_Y];
-  const fade = 1 - gusts[o + GUST_AGE] / GUST.life;
+function blowFront(air: Air, gust: Gust) {
+  const { cols, rows, cw, ch, vx, vy, glow } = air;
+  const { x: gx, y: gy, lanes } = gust;
+  const fade = 1 - gust.age / GUST.life;
   const radius = GUST.reach * (1 - fade * fade);
   const band = GUST.band;
   const speed = GUST.speed * fade;
@@ -201,7 +183,7 @@ function blowFront(air: Air, g: number) {
       if (off >= band || d === 0) {
         continue;
       }
-      const w = (1 - off / band) * laneAt(gusts, o + GUST_LANES, Math.atan2(oy, ox));
+      const w = (1 - off / band) * laneAt(lanes, Math.atan2(oy, ox));
       vx[i] += ((ox / d) * speed - vx[i]) * w;
       vy[i] += ((oy / d) * speed - vy[i]) * w;
       glow[i] = Math.min(MOST_GLOW, glow[i] + lift * w);
@@ -210,17 +192,15 @@ function blowFront(air: Air, g: number) {
 }
 
 function blowGusts(air: Air, dt: number): boolean {
-  const { gusts } = air;
   let blowing = false;
-  for (let g = 0; g < MOST_GUSTS; g++) {
-    const o = g * GUST_SIZE + GUST_AGE;
-    if (gusts[o] < 0) {
+  for (const gust of air.gusts) {
+    if (gust.age < 0) {
       continue;
     }
-    blowFront(air, g);
-    gusts[o] += dt;
-    if (gusts[o] >= GUST.life) {
-      gusts[o] = -1;
+    blowFront(air, gust);
+    gust.age += dt;
+    if (gust.age >= GUST.life) {
+      gust.age = -1;
     } else {
       blowing = true;
     }
@@ -273,14 +253,7 @@ export function stepAir(air: Air, dt: number): void {
     }
     dx[i] = px;
     dy[i] = py;
-    const pushed = Math.abs(px) + Math.abs(py);
-    const lit = glow[i] * 40;
-    if (pushed > most) {
-      most = pushed;
-    }
-    if (lit > most) {
-      most = lit;
-    }
+    most = Math.max(most, Math.abs(px) + Math.abs(py), glow[i] * 40);
   }
   const passes = Math.max(1, Math.round((SPREAD_CELL / air.cw) ** 2));
   const keepWind = wind ** (1 / passes);
@@ -300,7 +273,7 @@ export function stepAir(air: Air, dt: number): void {
     glow.fill(0);
     air.stirred = false;
   }
-  air.lively = blowing || (air.stirred && seenAnywhere(air));
+  air.lively = blowing || (air.stirred && air.glow.some((_, k) => seenAt(air, k)));
 }
 
 export const seenAt = (air: Air, k: number): boolean =>
@@ -309,12 +282,3 @@ export const seenAt = (air: Air, k: number): boolean =>
   air.dx[k] < -SEEN.push ||
   air.dy[k] > SEEN.push ||
   air.dy[k] < -SEEN.push;
-
-function seenAnywhere(air: Air): boolean {
-  for (let k = 0; k < air.glow.length; k++) {
-    if (seenAt(air, k)) {
-      return true;
-    }
-  }
-  return false;
-}

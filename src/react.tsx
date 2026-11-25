@@ -1,11 +1,8 @@
 "use client";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import type { ThemeChoice } from "./engine.ts";
-import { type MountedSky, type MountOptions, mountSky, SKY_HEIGHT } from "./mount.ts";
-import { stillSky } from "./still.ts";
+import { type MountedSky, type MountOptions, mountSky, SKY_HEIGHT, stillSky } from "./index.ts";
 
 export type AsciiSkyProps = MountOptions & {
-  theme?: ThemeChoice;
   className?: string;
   style?: CSSProperties;
 };

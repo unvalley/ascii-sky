@@ -1,14 +1,12 @@
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import sharp from "sharp";
 import { blow, createAir, puff, stepAir } from "../src/air.ts";
-import { sky } from "../src/art.ts";
-import { GLYPHS, skyCells } from "../src/cells.ts";
-import { STEP } from "../src/clock.ts";
-import { layoutGrid } from "../src/grid.ts";
-import { createFrame, shadeFrame, TURNS } from "../src/shade.ts";
+import { GLYPHS, skyCells, viceColours } from "../src/cells.ts";
+import { STEP } from "../src/engine.ts";
+import { sky } from "../src/index.ts";
+import { createFrame, layoutGrid, shadeFrame, TURNS } from "../src/shade.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
-const sharp = createRequire(import.meta.url)("sharp");
 const pixelsOf = async (name) => {
   const { data, info } = await sharp(`${ROOT}/assets/${name}`)
     .ensureAlpha()
@@ -19,14 +17,19 @@ const pixelsOf = async (name) => {
 const [light, dark, near, far] = await Promise.all(
   ["sky-light.webp", "sky-dark.webp", "clouds-near.webp", "clouds-far.webp"].map(pixelsOf),
 );
+const text = readFileSync(`${ROOT}/assets/sky.txt`, "utf8");
 const cells = skyCells({
   still: {
     columns: sky.columns,
     rows: sky.rows,
     cw: sky.cellWidth,
     ch: sky.cellHeight,
-    text: readFileSync(`${ROOT}/assets/sky.txt`, "utf8"),
-    rgb: { light: light.pixels, dark: dark.pixels },
+    text,
+    rgb: {
+      light: light.pixels,
+      dark: dark.pixels,
+      vice: viceColours(sky.columns, sky.rows, sky.cellHeight, text),
+    },
   },
   near,
   far,
