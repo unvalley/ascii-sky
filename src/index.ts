@@ -35,24 +35,25 @@ const SKY_FILES = {
 export type SkyAssets = string | Readonly<Record<keyof typeof SKY_FILES, string>>;
 
 const DEFAULT_ASSETS = "/ascii-sky/";
+const CELL = { cw: sky.cellWidth, ch: sky.cellHeight };
 
-function skyUrl(assets: SkyAssets, file: keyof typeof SKY_FILES): string {
+const skyUrl = (assets: SkyAssets, file: keyof typeof SKY_FILES): string => {
   if (typeof assets !== "string") {
     return assets[file];
   }
   const base = assets.endsWith("/") ? assets : `${assets}/`;
   return `${base}${SKY_FILES[file]}?v=${sky.version}`;
-}
+};
 
-async function fetched(url: string, signal?: AbortSignal) {
+const fetched = async (url: string, signal?: AbortSignal): Promise<Response> => {
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`ascii-sky: ${url} answered ${response.status}`);
   }
   return response;
-}
+};
 
-async function pixelsOf(url: string, signal?: AbortSignal): Promise<CloudLayer> {
+const pixelsOf = async (url: string, signal?: AbortSignal): Promise<CloudLayer> => {
   const response = await fetched(url, signal);
   const bitmap = await createImageBitmap(await response.blob(), {
     colorSpaceConversion: "none",
@@ -69,9 +70,9 @@ async function pixelsOf(url: string, signal?: AbortSignal): Promise<CloudLayer> 
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
   return { pixels: ctx.getImageData(0, 0, width, height).data, width, height };
-}
+};
 
-async function loadSky(assets: SkyAssets, signal: AbortSignal): Promise<SkyCells> {
+const loadSky = async (assets: SkyAssets, signal: AbortSignal): Promise<SkyCells> => {
   const [text, light, dark, near, far] = await Promise.all([
     fetched(skyUrl(assets, "text"), signal).then((response) => response.text()),
     pixelsOf(skyUrl(assets, "light"), signal),
@@ -96,7 +97,7 @@ async function loadSky(assets: SkyAssets, signal: AbortSignal): Promise<SkyCells
     far,
     shapes: measureShapes(sky.cellWidth, sky.cellHeight),
   });
-}
+};
 
 const STILL_OPACITY: Record<SkyTheme, number> = { light: 0.4, dark: 0.33, vice: 0.4 };
 
@@ -106,13 +107,14 @@ export type StillSkyStyle = {
   opacity: number;
 };
 
-export function stillSky(theme: SkyTheme, assets: SkyAssets = DEFAULT_ASSETS): StillSkyStyle {
-  const background =
+export const stillSky = (theme: SkyTheme, assets: SkyAssets = DEFAULT_ASSETS): StillSkyStyle => ({
+  background:
     theme === "vice"
       ? viceGradient()
-      : `url("${skyUrl(assets, theme)}") center top / ${SKY_WIDTH}px ${SKY_HEIGHT}px repeat-x`;
-  return { background, imageRendering: "pixelated", opacity: STILL_OPACITY[theme] };
-}
+      : `url("${skyUrl(assets, theme)}") center top / ${SKY_WIDTH}px ${SKY_HEIGHT}px repeat-x`,
+  imageRendering: "pixelated",
+  opacity: STILL_OPACITY[theme],
+});
 
 export type MountOptions = SkyOptions & {
   assets?: SkyAssets;
@@ -122,38 +124,37 @@ export type MountedSky = Sky & {
   ready: Promise<void>;
 };
 
-export function mountSky(
+export const mountSky = (
   canvas: HTMLCanvasElement,
   { assets = DEFAULT_ASSETS, night = NIGHT, theme = "auto", ...options }: MountOptions = {},
-): MountedSky {
+): MountedSky => {
   const loading = new AbortController();
-  let running: Sky | null = null;
-  let choice: ThemeChoice = theme;
-  let stopped = false;
-  const cell = { cw: sky.cellWidth, ch: sky.cellHeight };
+  const mounted: { theme: ThemeChoice; running: Sky | null } = { theme, running: null };
   const ready = loadSky(assets, loading.signal).then(
     (cells) => {
-      if (!stopped) {
-        running = startSky(canvas, cells, SKY_WIDTH, cell, { ...options, night, theme: choice });
+      if (!loading.signal.aborted) {
+        mounted.running = startSky(canvas, cells, SKY_WIDTH, CELL, {
+          ...options,
+          night,
+          theme: mounted.theme,
+        });
       }
     },
     (error: unknown) => {
-      if (!stopped) {
+      if (!loading.signal.aborted) {
         throw error;
       }
     },
   );
   return {
     ready,
-    setTheme(next) {
-      choice = next;
-      running?.setTheme(next);
+    setTheme: (next) => {
+      mounted.theme = next;
+      mounted.running?.setTheme(next);
     },
-    stop() {
-      stopped = true;
+    stop: () => {
       loading.abort();
-      running?.stop();
-      running = null;
+      mounted.running?.stop();
     },
   };
-}
+};

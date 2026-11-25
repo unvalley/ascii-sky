@@ -5,7 +5,7 @@ import { AsciiSky } from "../src/react.tsx";
 
 const THEMES = ["light", "dark", "vice"] as const;
 
-export function App() {
+export const App = () => {
   const [theme, setTheme] = useState<SkyTheme>("light");
   document.body.dataset.theme = theme;
   const pick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
@@ -24,7 +24,7 @@ export function App() {
       </main>
     </>
   );
-}
+};
 
 const root = document.querySelector("#root");
 if (root) {

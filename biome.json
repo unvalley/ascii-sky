@@ -13,6 +13,7 @@
     "rules": {
       "preset": "all",
       "complexity": {
+        "noForEach": "off",
         "noExcessiveCognitiveComplexity": "off",
         "noExcessiveLinesPerFunction": "off",
         "useMaxParams": "off"
@@ -23,6 +24,15 @@
         "noSolidDestructuredProps": "off",
         "useQwikValidLexicalScope": "off",
         "noUnresolvedImports": "off"
+      },
+      "nursery": {
+        "useConsistentFunctionStyle": "error",
+        "useReactFunctionComponentDefinition": {
+          "level": "error",
+          "options": {
+            "namedComponents": "arrowFunction"
+          }
+        }
       },
       "performance": {
         "useSolidForComponent": "off"

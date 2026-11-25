@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { blow, createAir, puff, stepAir } from "../src/air.ts";
-import { GLYPHS, skyCells, viceColours } from "../src/cells.ts";
+import { GLYPHS, range, skyCells, viceColours } from "../src/cells.ts";
 import { STEP } from "../src/engine.ts";
 import { sky } from "../src/index.ts";
 import { createFrame, layoutGrid, shadeFrame, TURNS } from "../src/shade.ts";
@@ -37,7 +37,7 @@ const cells = skyCells({
 });
 
 const median = (a) => [...a].sort((x, y) => x - y)[a.length >> 1];
-function bench(width, dpr) {
+const bench = (width, dpr) => {
   const hero = width >= 768 ? 360 : 240;
   const grid = layoutGrid(
     width,
@@ -51,11 +51,7 @@ function bench(width, dpr) {
   const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n));
   const air = createAir(grid.cols, grid.rows, grid.cw, grid.ch);
   const run = (frames, stir) => {
-    const shade = [];
-    const move = [];
-    let t = 0;
-    for (let i = 0; i < frames; i++) {
-      t += STEP;
+    const times = range(frames).map((i) => {
       if (stir) {
         const x = (width / 2) * (1 + Math.sin(i / 20));
         blow(air, x, 150 + 80 * Math.sin(i / 13), i * 16.7);
@@ -66,11 +62,14 @@ function bench(width, dpr) {
       const a = performance.now();
       stepAir(air, STEP);
       const b = performance.now();
-      shadeFrame(grid, cells, air, frame, t, "light", i & 1, TURNS, i % TURNS);
-      shade.push(performance.now() - b);
-      move.push(b - a);
-    }
-    return { shade: median(shade.slice(60)), air: median(move.slice(60)) };
+      shadeFrame(grid, cells, air, frame, (i + 1) * STEP, "light", i & 1, TURNS, i % TURNS);
+      return { shade: performance.now() - b, air: b - a };
+    });
+    const settled = times.slice(60);
+    return {
+      shade: median(settled.map((t) => t.shade)),
+      air: median(settled.map((t) => t.air)),
+    };
   };
   const still = run(400, false);
   const wind = run(400, true);
@@ -78,7 +77,11 @@ function bench(width, dpr) {
   console.log(
     `${String(width).padStart(4)} px (${grid.cols}×${grid.rows} cells): still ${f(still.shade)} a frame; in wind ${f(wind.shade)} + air ${f(wind.air)}`,
   );
-}
-bench(1440, 2);
-bench(820, 2);
-bench(390, 2);
+};
+[
+  [1440, 2],
+  [820, 2],
+  [390, 2],
+].forEach(([width, dpr]) => {
+  bench(width, dpr);
+});

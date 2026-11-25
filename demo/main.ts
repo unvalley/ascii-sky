@@ -39,31 +39,32 @@ const save = (value: string): boolean => {
 };
 
 const saved = load();
-let choice = (saved !== null && CHOICES.includes(saved) ? saved : "auto") as ThemeChoice;
+const first = (saved !== null && CHOICES.includes(saved) ? saved : "auto") as ThemeChoice;
+const chosen = () => (root.dataset.theme ?? "auto") as ThemeChoice;
 
 box.style.height = `${SKY_HEIGHT}px`;
-const sky = mountSky(canvas, { assets, theme: choice });
+const sky = mountSky(canvas, { assets, theme: first });
 
 const buttons = [...themes.querySelectorAll<HTMLButtonElement>("button")];
-const show = () => {
+const show = (choice: ThemeChoice) => {
   root.dataset.theme = choice;
   const { background, imageRendering, opacity } = stillSky(skyFor(choice), assets);
   still.style.background = background;
   still.style.imageRendering = imageRendering;
   still.style.setProperty("--still-opacity", String(opacity));
-  for (const button of buttons) {
+  buttons.forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.theme === choice));
-  }
+  });
 };
 themes.addEventListener("click", (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>("button");
   if (!button) {
     return;
   }
-  choice = (button.dataset.theme ?? "auto") as ThemeChoice;
+  const choice = (button.dataset.theme ?? "auto") as ThemeChoice;
   save(choice);
   sky.setTheme(choice);
-  show();
+  show(choice);
 });
-darkScheme.addEventListener("change", show);
-show();
+darkScheme.addEventListener("change", () => show(chosen()));
+show(first);

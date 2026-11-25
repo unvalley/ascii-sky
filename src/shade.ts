@@ -1,20 +1,28 @@
 import { type Air, seenAt } from "./air.ts";
-import { glyphOf, hash, OPEN_SKY, SKY_RAMP, type SkyCells, type SkyTheme } from "./cells.ts";
+import {
+  glyphOf,
+  hash,
+  OPEN_SKY,
+  range,
+  SKY_RAMP,
+  type SkyCells,
+  type SkyTheme,
+  span,
+} from "./cells.ts";
 
 const SINE_SIZE = 4096;
-const SINE = new Float64Array(SINE_SIZE + 1);
-for (let i = 0; i <= SINE_SIZE; i++) {
-  SINE[i] = Math.sin((i / SINE_SIZE) * Math.PI * 2);
-}
+const SINE = Float64Array.from({ length: SINE_SIZE + 1 }, (_, i) =>
+  Math.sin((i / SINE_SIZE) * Math.PI * 2),
+);
 const PER_RADIAN = SINE_SIZE / (Math.PI * 2);
 
-export function sine(a: number): number {
+export const sine = (a: number): number => {
   const turns = a * PER_RADIAN;
   const at = turns - Math.floor(turns / SINE_SIZE) * SINE_SIZE;
   const i = at | 0;
   const v = SINE[i];
   return v + (SINE[i + 1] - v) * (at - i);
-}
+};
 
 export type Grid = Readonly<{
   width: number;
@@ -38,32 +46,21 @@ export type Grid = Readonly<{
 
 export type Cell = Readonly<{ cw: number; ch: number }>;
 
-export function layoutGrid(
+export const layoutGrid = (
   width: number,
   height: number,
   dpr: number,
   skyWidth: number,
   { cw, ch }: Cell,
   faint = 0,
-): Grid {
+): Grid => {
   const half = Math.floor(width / 2 / cw);
   const originX = width / 2 - half * cw;
   const cols = half * 2;
   const rows = Math.ceil(height / ch);
-  const left = new Int32Array(cols);
-  const across = new Int32Array(cols);
-  for (let c = 0; c < cols; c++) {
-    const x = originX + c * cw;
-    left[c] = Math.round(x * dpr);
-    across[c] = Math.round((x + cw) * dpr) - left[c];
-  }
-  const top = new Int32Array(rows);
-  const down = new Int32Array(rows);
-  for (let r = 0; r < rows; r++) {
-    const y = r * ch;
-    top[r] = Math.round(y * dpr);
-    down[r] = Math.round((y + ch) * dpr) - top[r];
-  }
+  const xAt = (c: number) => originX + c * cw;
+  const left = Int32Array.from({ length: cols }, (_, c) => Math.round(xAt(c) * dpr));
+  const top = Int32Array.from({ length: rows }, (_, r) => Math.round(r * ch * dpr));
   return {
     width,
     height,
@@ -77,13 +74,13 @@ export function layoutGrid(
     originX,
     skyX: skyWidth / 2 - width / 2,
     left,
-    across,
+    across: left.map((from, c) => Math.round((xAt(c) + cw) * dpr) - from),
     top,
-    down,
+    down: top.map((from, r) => Math.round((r * ch + ch) * dpr) - from),
     faint,
     faintRow: faint > 0 ? Math.min(rows, Math.ceil(faint / ch)) : rows,
   };
-}
+};
 
 const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], vice: [0, 190, 230] } as const;
 const WIND_TINT = {
@@ -164,7 +161,15 @@ const BIG: readonly Step[] = [
   [[0, 0, glyphOf(".")]],
 ];
 
-type Sparkle = { steps: readonly Step[] | null; age: number; c: number; r: number; tint: number };
+type Sparkle = Readonly<{
+  steps: readonly Step[] | null;
+  age: number;
+  c: number;
+  r: number;
+  tint: number;
+}>;
+
+const GONE: Sparkle = { steps: null, age: 0, c: 0, r: 0, tint: 0 };
 
 export type Sparkles = {
   readonly cols: number;
@@ -173,128 +178,125 @@ export type Sparkles = {
   readonly tint: Uint8Array;
   readonly touched: Uint8Array;
   readonly touchedRows: Uint8Array;
-  readonly pool: Sparkle[];
+  pool: readonly Sparkle[];
   owed: number;
 };
 
-export function createSparkles(cols: number, rows: number): Sparkles {
-  return {
-    cols,
-    rows,
-    code: new Int16Array(cols * rows).fill(-1),
-    tint: new Uint8Array(cols * rows),
-    touched: new Uint8Array(cols * rows),
-    touchedRows: new Uint8Array(rows),
-    pool: Array.from({ length: MOST.big + MOST.small }, () => ({
-      steps: null,
-      age: 0,
-      c: 0,
-      r: 0,
-      tint: 0,
-    })),
-    owed: 0,
-  };
-}
+export const createSparkles = (cols: number, rows: number): Sparkles => ({
+  cols,
+  rows,
+  code: new Int16Array(cols * rows).fill(-1),
+  tint: new Uint8Array(cols * rows),
+  touched: new Uint8Array(cols * rows),
+  touchedRows: new Uint8Array(rows),
+  pool: range(MOST.big + MOST.small).map(() => GONE),
+  owed: 0,
+});
 
-function lay(sp: Sparkles, s: Sparkle, on: boolean) {
-  const step = s.steps?.[s.age];
-  if (!step) {
-    return;
-  }
-  for (const [dc, dr, glyph] of step) {
+const lay = (sp: Sparkles, s: Sparkle, on: boolean) => {
+  const step = s.steps?.[s.age] ?? [];
+  step.forEach(([dc, dr, glyph]) => {
     const c = s.c + dc;
     const r = s.r + dr;
     if (c < 0 || r < 0 || c >= sp.cols || r >= sp.rows) {
-      continue;
+      return;
     }
     const k = r * sp.cols + c;
     sp.code[k] = on ? glyph : -1;
     sp.tint[k] = s.tint;
     sp.touched[k] = 1;
     sp.touchedRows[r] = 1;
-  }
-}
+  });
+};
 
-function crowded(sp: Sparkles, steps: readonly Step[], c: number, r: number) {
+const crowded = (sp: Sparkles, steps: readonly Step[], c: number, r: number) => {
   const reach = steps === BIG ? 2 : 0;
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -reach; dc <= reach; dc++) {
-      const cc = c + dc;
-      const rr = r + dr;
-      if (cc < 0 || rr < 0 || cc >= sp.cols || rr >= sp.rows || sp.code[rr * sp.cols + cc] >= 0) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
+  return span(r - 1, r + 1).some((rr) =>
+    span(c - reach, c + reach).some(
+      (cc) => cc < 0 || rr < 0 || cc >= sp.cols || rr >= sp.rows || sp.code[rr * sp.cols + cc] >= 0,
+    ),
+  );
+};
 
-function spawn(
+type Spot = Readonly<{ c: number; r: number }>;
+
+const findSpot = (
   sp: Sparkles,
   steps: readonly Step[],
   rows: number,
   isStar: (c: number, r: number) => boolean,
   random: () => number,
-) {
-  const free = sp.pool.find((s) => !s.steps);
-  if (!free) {
-    return;
+  tries: number,
+): Spot | null => {
+  if (tries === 0) {
+    return null;
   }
-  for (let tries = 0; tries < 24; tries++) {
-    const c = 2 + Math.floor(random() * (sp.cols - 4));
-    const r = 1 + Math.floor(random() * Math.max(1, Math.min(rows, sp.rows) - 2));
-    if (!isStar(c, r) || crowded(sp, steps, c, r)) {
-      continue;
-    }
-    free.steps = steps;
-    free.age = 0;
-    free.c = c;
-    free.r = r;
-    free.tint = Math.floor(random() * TINTS.length);
-    lay(sp, free, true);
-    return;
-  }
-}
+  const c = 2 + Math.floor(random() * (sp.cols - 4));
+  const r = 1 + Math.floor(random() * Math.max(1, Math.min(rows, sp.rows) - 2));
+  return isStar(c, r) && !crowded(sp, steps, c, r)
+    ? { c, r }
+    : findSpot(sp, steps, rows, isStar, random, tries - 1);
+};
 
-export function stepSparkles(
+const spawn = (
+  sp: Sparkles,
+  pool: readonly Sparkle[],
+  steps: readonly Step[],
+  rows: number,
+  isStar: (c: number, r: number) => boolean,
+  random: () => number,
+): readonly Sparkle[] => {
+  const slot = pool.findIndex((s) => !s.steps);
+  const spot = slot < 0 ? null : findSpot(sp, steps, rows, isStar, random, 24);
+  if (!spot) {
+    return pool;
+  }
+  const born = { steps, age: 0, ...spot, tint: Math.floor(random() * TINTS.length) };
+  lay(sp, born, true);
+  return pool.map((s, i) => (i === slot ? born : s));
+};
+
+const older = (sp: Sparkles, s: Sparkle): Sparkle => {
+  if (!s.steps) {
+    return s;
+  }
+  lay(sp, s, false);
+  const next = s.age + 1 < s.steps.length ? { ...s, age: s.age + 1 } : GONE;
+  lay(sp, next, true);
+  return next;
+};
+
+const tickSparkles = (
+  sp: Sparkles,
+  pool: readonly Sparkle[],
+  rows: number,
+  isStar: (c: number, r: number) => boolean,
+  random: () => number,
+): readonly Sparkle[] => {
+  const now = pool.map((s) => older(sp, s));
+  const big = now.filter((s) => s.steps === BIG).length;
+  const small = now.filter((s) => s.steps === SMALL).length;
+  const withBig =
+    big < MOST.big && random() < 0.35 ? spawn(sp, now, BIG, rows, isStar, random) : now;
+  return range(2).reduce(
+    (p) => (small < MOST.small && random() < 0.6 ? spawn(sp, p, SMALL, rows, isStar, random) : p),
+    withBig,
+  );
+};
+
+export const stepSparkles = (
   sp: Sparkles,
   dt: number,
   rows: number,
   isStar: (c: number, r: number) => boolean,
   random: () => number = Math.random,
-): void {
-  sp.owed += dt;
-  while (sp.owed >= TICK) {
-    sp.owed -= TICK;
-    let big = 0;
-    let small = 0;
-    for (const s of sp.pool) {
-      if (!s.steps) {
-        continue;
-      }
-      lay(sp, s, false);
-      s.age++;
-      if (s.age >= s.steps.length) {
-        s.steps = null;
-        continue;
-      }
-      lay(sp, s, true);
-      if (s.steps === BIG) {
-        big++;
-      } else {
-        small++;
-      }
-    }
-    if (big < MOST.big && random() < 0.35) {
-      spawn(sp, BIG, rows, isStar, random);
-    }
-    for (let i = 0; i < 2; i++) {
-      if (small < MOST.small && random() < 0.6) {
-        spawn(sp, SMALL, rows, isStar, random);
-      }
-    }
-  }
-}
+): void => {
+  const settle = (debt: number, live: readonly Sparkle[]): readonly [number, readonly Sparkle[]] =>
+    debt >= TICK ? settle(debt - TICK, tickSparkles(sp, live, rows, isStar, random)) : [debt, live];
+  const [owed, pool] = settle(sp.owed + dt, sp.pool);
+  sp.owed = owed;
+  sp.pool = pool;
+};
 
 export type Frame = Readonly<{
   colours: Uint8ClampedArray;
@@ -302,19 +304,25 @@ export type Frame = Readonly<{
   shown: Int16Array;
   changed: Int32Array;
   breath: Float32Array;
-  bandAcross: Float64Array;
-  bandDown: Float64Array;
   out: number[];
   night: Stars;
   sparkles: Sparkles | null;
 }>;
 
-export function createFrame(
+export const breathing = (cols: number, rows: number): Float32Array =>
+  Float32Array.from({ length: cols * rows * 2 }, (_, i) => {
+    const k = Math.floor(i / 2);
+    const c = k % cols;
+    const r = (k - c) / cols;
+    return i % 2 === 0 ? hash(c, r, 23) * Math.PI * 2 : 0.25 + hash(c, r, 37) * 0.9;
+  });
+
+export const createFrame = (
   grid: Grid,
   colours: Uint8ClampedArray,
   tiles: Uint8ClampedArray,
   night: Stars = NO_STARS,
-): Frame {
+): Frame => {
   const { cols, rows } = grid;
   return {
     colours,
@@ -322,27 +330,13 @@ export function createFrame(
     shown: new Int16Array(cols * rows).fill(UNDRAWN),
     changed: new Int32Array(cols * rows),
     breath: breathing(cols, rows),
-    bandAcross: new Float64Array(cols),
-    bandDown: new Float64Array(rows),
     out: [0, 0, 0, 0, 0, 0, 0, 0],
     night,
     sparkles: night.sparkle ? createSparkles(cols, rows) : null,
   };
-}
+};
 
-export function breathing(cols: number, rows: number): Float32Array {
-  const breath = new Float32Array(cols * rows * 2);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = (r * cols + c) * 2;
-      breath[i] = hash(c, r, 23) * Math.PI * 2;
-      breath[i + 1] = 0.25 + hash(c, r, 37) * 0.9;
-    }
-  }
-  return breath;
-}
-
-export function streak(vx: number, vy: number, glow: number): number {
+export const streak = (vx: number, vy: number, glow: number): number => {
   const ax = Math.abs(vx);
   const ay = Math.abs(vy);
   if (ax > ay * LEVEL) {
@@ -352,9 +346,15 @@ export function streak(vx: number, vy: number, glow: number): number {
     return UP;
   }
   return vx * vy < 0 ? RISING : FALLING;
-}
+};
 
-export function shadeFrame(
+const paint = (out: number[], rgb: readonly number[]) => {
+  out[0] = rgb[0];
+  out[1] = rgb[1];
+  out[2] = rgb[2];
+};
+
+export const shadeFrame = (
   grid: Grid,
   cells: SkyCells,
   air: Air,
@@ -364,9 +364,9 @@ export function shadeFrame(
   half: number = EVERY_ROW,
   every = 1,
   turn = 0,
-): number {
+): number => {
   const { cols, rows, cw, ch, originX, skyX, faintRow } = grid;
-  const { colours, tiles, shown, changed, breath, bandAcross, bandDown, out, night } = frame;
+  const { colours, tiles, shown, changed, breath, out, night } = frame;
   const dark = theme === "dark";
   const glow = dark ? night.glow : GLOW[theme];
   const windTint = WIND_TINT[theme];
@@ -375,13 +375,9 @@ export function shadeFrame(
   const { stirred, vx, vy, dx, dy } = air;
   const airGlow = air.glow;
   const top = RAMP.length - 1;
-  for (let c = 0; c < cols; c++) {
-    bandAcross[c] = Math.sin(c * 0.09 + t * 0.3);
-  }
-  for (let r = 0; r < rows; r++) {
-    bandDown[r] = Math.sin(r * 0.15 - t * 0.23);
-  }
-  cells.at(t);
+  const across = Float64Array.from({ length: cols }, (_, c) => Math.sin(c * 0.09 + t * 0.3));
+  const downs = Float64Array.from({ length: rows }, (_, r) => Math.sin(r * 0.15 - t * 0.23));
+  const cellAt = cells.at(t, theme);
 
   let n = 0;
   for (let r = 0; r < rows; r++) {
@@ -393,7 +389,7 @@ export function shadeFrame(
       continue;
     }
     const y = r * ch;
-    const down = bandDown[r];
+    const down = downs[r];
     for (let c = 0; c < cols; c++) {
       const k = r * cols + c;
       if (offTurn && !seenAt(air, k) && !sparks?.touched[k]) {
@@ -401,21 +397,21 @@ export function shadeFrame(
       }
       const o = k * 4;
       const was = shown[k];
-      let code = cells.cell(
+      const drawn = cellAt(
         originX + c * cw + skyX,
         y,
         cw,
         ch,
-        theme,
         out,
         was >= 0 ? was : -1,
         stirred ? dx[k] : 0,
         stirred ? dy[k] : 0,
       );
+      let code = drawn;
       let alpha = 1;
-      if (code === OPEN_SKY) {
+      if (drawn === OPEN_SKY) {
         const breathe = 0.5 + 0.5 * sine(t * breath[k * 2 + 1] + breath[k * 2]);
-        const band = 0.93 + 0.07 * bandAcross[c] * down;
+        const band = 0.93 + 0.07 * across[c] * down;
         alpha = (0.9 + 0.1 * breathe) * band;
         out[7] *= band;
         code = RAMP[(out[3] * top + 0.5) | 0];
@@ -425,9 +421,7 @@ export function shadeFrame(
             code = STAR[(hash(sc, r, 103) * STAR.length) | 0];
             const twinkle = 0.5 + 0.5 * sine(t * 2.2 * breath[k * 2 + 1] + breath[k * 2]);
             alpha = 0.35 + 0.65 * twinkle;
-            out[0] = night.star[0];
-            out[1] = night.star[1];
-            out[2] = night.star[2];
+            paint(out, night.star);
           }
         }
         if (sparks) {
@@ -435,10 +429,7 @@ export function shadeFrame(
           sparks.touched[k] = 0;
           if (spark >= 0) {
             code = spark;
-            const tint = TINTS[sparks.tint[k]];
-            out[0] = tint[0];
-            out[1] = tint[1];
-            out[2] = tint[2];
+            paint(out, TINTS[sparks.tint[k]]);
             alpha = 1;
           }
         }
@@ -465,15 +456,14 @@ export function shadeFrame(
       tiles[o + 1] = out[5];
       tiles[o + 2] = out[6];
       tiles[o + 3] = (out[7] * 255 + 0.5) | 0;
-      if (code === shown[k]) {
-        continue;
+      if (code !== shown[k]) {
+        shown[k] = code;
+        changed[n++] = k;
       }
-      shown[k] = code;
-      changed[n++] = k;
     }
     if (sparks) {
       sparks.touchedRows[r] = 0;
     }
   }
   return n;
-}
+};

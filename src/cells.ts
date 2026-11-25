@@ -1,42 +1,39 @@
-function mix(n: number): number {
-  let h = n;
-  h ^= h >>> 16;
-  h = Math.imul(h, 0x7f_eb_35_2d);
-  h ^= h >>> 15;
-  h = Math.imul(h, 0x84_6c_a6_8b);
-  h ^= h >>> 16;
-  return h;
-}
+export const range = (n: number): number[] => Array.from({ length: n }, (_, i) => i);
 
-export function hash(x: number, y: number, z: number): number {
-  return (mix(mix(mix(z | 0) ^ (y | 0)) ^ (x | 0)) >>> 0) / 4_294_967_296;
-}
+export const span = (from: number, to: number): number[] =>
+  Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
-export function wrap(x: number, n: number): number {
+export const once = <T>(make: () => T): (() => T) => {
+  const kept: { value?: T } = {};
+  return () => {
+    kept.value ??= make();
+    return kept.value;
+  };
+};
+
+const mix = (n: number): number => {
+  const a = Math.imul(n ^ (n >>> 16), 0x7f_eb_35_2d);
+  const b = Math.imul(a ^ (a >>> 15), 0x84_6c_a6_8b);
+  return b ^ (b >>> 16);
+};
+
+export const hash = (x: number, y: number, z: number): number =>
+  (mix(mix(mix(z | 0) ^ (y | 0)) ^ (x | 0)) >>> 0) / 4_294_967_296;
+
+export const wrap = (x: number, n: number): number => {
   const w = x - Math.floor(x / n) * n;
   if (w < 0) {
     return w + n;
   }
-  if (w >= n) {
-    return w - n;
-  }
-  return w;
-}
+  return w >= n ? w - n : w;
+};
 
-export const smooth = (a: number, b: number, t: number) => {
+export const smooth = (a: number, b: number, t: number): number => {
   const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
   return x * x * (3 - 2 * x);
 };
 
-const toByte = (x: number) => {
-  if (x < 0) {
-    return 0;
-  }
-  if (x > 255) {
-    return 255;
-  }
-  return x | 0;
-};
+const toByte = (x: number): number => Math.min(255, Math.max(0, x)) | 0;
 
 type Rgb = readonly [number, number, number];
 
@@ -46,16 +43,16 @@ export const hex = (h: string): Rgb => [
   Number.parseInt(h.slice(5, 7), 16),
 ];
 
-const toLinear = (v: number) => {
+const toLinear = (v: number): number => {
   const c = v / 255;
   return c <= 0.040_45 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 };
-const fromLinear = (v: number) => {
+const fromLinear = (v: number): number => {
   const c = v <= 0.003_130_8 ? 12.92 * v : 1.055 * Math.max(0, v) ** (1 / 2.4) - 0.055;
   return Math.max(0, Math.min(255, Math.round(c * 255)));
 };
 
-export function oklab(r: number, g: number, b: number): [number, number, number] {
+export const oklab = (r: number, g: number, b: number): [number, number, number] => {
   const R = toLinear(r);
   const G = toLinear(g);
   const B = toLinear(b);
@@ -67,9 +64,9 @@ export function oklab(r: number, g: number, b: number): [number, number, number]
     1.977_998_495_1 * l - 2.428_592_205 * m + 0.450_593_709_9 * s,
     0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766 * s,
   ];
-}
+};
 
-export function fromOklab(L: number, a: number, b: number): [number, number, number] {
+export const fromOklab = (L: number, a: number, b: number): [number, number, number] => {
   const l = (L + 0.396_337_777_4 * a + 0.215_803_757_3 * b) ** 3;
   const m = (L - 0.105_561_345_8 * a - 0.063_854_172_8 * b) ** 3;
   const s = (L - 0.089_484_177_5 * a - 1.291_485_548 * b) ** 3;
@@ -78,11 +75,11 @@ export function fromOklab(L: number, a: number, b: number): [number, number, num
     fromLinear(-1.268_438_004_6 * l + 2.609_757_401_1 * m - 0.341_319_396_5 * s),
     fromLinear(-0.004_196_086_3 * l - 0.703_418_614_7 * m + 1.707_614_701 * s),
   ];
-}
+};
 
 export const SKY_RAMP = ".:+*ox%#@";
 export const GLYPHS = [...new Set([...SKY_RAMP, ..."-_'`,;~()8|/\\"])];
-export const glyphOf = (g: string) => GLYPHS.indexOf(g);
+export const glyphOf = (g: string): number => GLYPHS.indexOf(g);
 const codes = (glyphs: string) => [...glyphs].map(glyphOf);
 const EDGE_GLYPHS = ".,'`-_~():;";
 const EDGE = codes(EDGE_GLYPHS);
@@ -102,45 +99,32 @@ const KEEP_SHADE = 0.8;
 const KEEP_SHAPE = 0.1;
 const EDGE_INK = 0.7;
 
-export function measureGlyph(alpha: ArrayLike<number>, w: number, h: number) {
-  const out = new Float32Array(6);
+export const measureGlyph = (alpha: ArrayLike<number>, w: number, h: number): Float32Array => {
   const radius = REGION_RADIUS * w;
-  for (let k = 0; k < 6; k++) {
-    const cx = REGIONS[k][0] * w;
-    const cy = REGIONS[k][1] * h;
-    let sum = 0;
-    let n = 0;
-    for (let y = Math.floor(cy - radius); y <= Math.ceil(cy + radius); y++) {
-      for (let x = Math.floor(cx - radius); x <= Math.ceil(cx + radius); x++) {
-        if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > radius * radius) {
-          continue;
-        }
-        n++;
-        if (x >= 0 && y >= 0 && x < w && y < h) {
-          sum += alpha[y * w + x] / 255;
-        }
-      }
-    }
-    out[k] = n ? sum / n : 0;
-  }
-  return out;
-}
-
-export function normaliseShapes(measured: Float32Array[]) {
-  const shapes = new Float32Array(GLYPHS.length * 6);
-  const most = new Float32Array(6);
-  for (const m of measured) {
-    for (let k = 0; k < 6; k++) {
-      most[k] = Math.max(most[k], m[k]);
-    }
-  }
-  measured.forEach((m, g) => {
-    for (let k = 0; k < 6; k++) {
-      shapes[g * 6 + k] = most[k] ? m[k] / most[k] : 0;
-    }
+  return Float32Array.from(REGIONS, ([rx, ry]) => {
+    const cx = rx * w;
+    const cy = ry * h;
+    const xs = span(Math.floor(cx - radius), Math.ceil(cx + radius));
+    const disc = span(Math.floor(cy - radius), Math.ceil(cy + radius)).flatMap((y) =>
+      xs
+        .filter((x) => (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= radius * radius)
+        .map((x) => [x, y] as const),
+    );
+    const sum = disc.reduce(
+      (total, [x, y]) =>
+        x >= 0 && y >= 0 && x < w && y < h ? total + alpha[y * w + x] / 255 : total,
+      0,
+    );
+    return disc.length > 0 ? sum / disc.length : 0;
   });
-  return shapes;
-}
+};
+
+export const normaliseShapes = (measured: readonly Float32Array[]): Float32Array => {
+  const most = REGIONS.map((_, k) => measured.reduce((m, shape) => Math.max(m, shape[k]), 0));
+  return Float32Array.from(
+    measured.flatMap((shape) => Array.from(shape, (v, k) => (most[k] ? v / most[k] : 0))),
+  );
+};
 
 export type CloudLayer = {
   pixels: Uint8ClampedArray;
@@ -207,103 +191,101 @@ export const VICE_STOPS: readonly (readonly [number, string])[] = [
 const VICE_LAB = VICE_STOPS.map(([y, c]) => [y, oklab(...hex(c))] as const);
 const VICE_DEPTH = 0.1;
 
-function sunsetAt(y: number): readonly [number, number, number] {
-  const last = VICE_LAB.length - 1;
-  if (y <= VICE_LAB[0][0]) {
-    return VICE_LAB[0][1];
+const sunsetAt = (y: number): readonly [number, number, number] => {
+  const [first] = VICE_LAB;
+  const last = VICE_LAB.at(-1) ?? first;
+  if (y <= first[0]) {
+    return first[1];
   }
-  if (y >= VICE_LAB[last][0]) {
-    return VICE_LAB[last][1];
+  if (y >= last[0]) {
+    return last[1];
   }
-  let i = 0;
-  while (VICE_LAB[i + 1][0] < y) {
-    i++;
-  }
-  const [y0, a] = VICE_LAB[i];
-  const [y1, b] = VICE_LAB[i + 1];
+  const next = VICE_LAB.findIndex(([at]) => at >= y);
+  const [y0, a] = VICE_LAB[next - 1];
+  const [y1, b] = VICE_LAB[next];
   const t = (y - y0) / (y1 - y0);
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-}
+};
 
-export function viceColours(
+export const viceColours = (
   columns: number,
   rows: number,
   ch: number,
   text: string,
-): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(columns * rows * 4);
+): Uint8ClampedArray => {
   const lines = text.split("\n");
-  for (let r = 0; r < rows; r++) {
+  const shades = range(rows).map((r) => {
     const [L, a, b] = sunsetAt((r + 0.5) * ch);
-    const shades = [...SKY_RAMP].map((_, g) =>
+    return [...SKY_RAMP].map((_, g) =>
       fromOklab(L + VICE_DEPTH * (0.5 - g / (SKY_RAMP.length - 1)), a, b),
     );
-    const line = lines[r] ?? "";
-    for (let c = 0; c < columns; c++) {
-      const o = (r * columns + c) * 4;
-      out.set(shades[Math.max(0, SKY_RAMP.indexOf(line[c] ?? "."))], o);
-      out[o + 3] = 255;
-    }
-  }
-  return out;
-}
+  });
+  return Uint8ClampedArray.from({ length: columns * rows * 4 }, (_, i) => {
+    const channel = i % 4;
+    const k = (i - channel) / 4;
+    const c = k % columns;
+    const r = (k - c) / columns;
+    const glyph = lines[r]?.[c] ?? ".";
+    return channel === 3 ? 255 : shades[r][Math.max(0, SKY_RAMP.indexOf(glyph))][channel];
+  });
+};
 
-export const viceGradient = () =>
+export const viceGradient = (): string =>
   `linear-gradient(to bottom, ${VICE_STOPS.map(([y, c]) => `${c} ${y}px`).join(", ")})`;
 
-export function bigClouds(layer: CloudLayer, smallest: number): CloudLayer {
+export const bigClouds = (layer: CloudLayer, smallest: number): CloudLayer => {
   const { pixels, width: w, height: h } = layer;
   const out = new Uint8ClampedArray(pixels);
-  const least = smallest / 4;
   const seen = new Uint8Array(w * h);
-  const cloud = new Int32Array(w * h);
-  for (let start = 0; start < w * h; start++) {
-    if (seen[start] || pixels[start * 4 + 1] === 0) {
-      continue;
-    }
-    let size = 0;
-    let todo = 0;
-    cloud[todo++] = start;
+  const isCloud = (i: number) => pixels[i * 4 + 1] > 0;
+  const besides = (i: number) => {
+    const x = i % w;
+    const y = (i - x) / w;
+    return [
+      y * w + (x + 1 === w ? 0 : x + 1),
+      y * w + (x === 0 ? w - 1 : x - 1),
+      y > 0 ? i - w : -1,
+      y + 1 < h ? i + w : -1,
+    ];
+  };
+  const cloudFrom = (start: number) => {
+    const cloud = [start];
     seen[start] = 1;
-    while (size < todo) {
-      const i = cloud[size++];
-      const x = i % w;
-      const y = (i - x) / w;
-      for (const j of [
-        y * w + (x + 1 === w ? 0 : x + 1),
-        y * w + (x === 0 ? w - 1 : x - 1),
-        y > 0 ? i - w : -1,
-        y + 1 < h ? i + w : -1,
-      ]) {
-        if (j >= 0 && !seen[j] && pixels[j * 4 + 1] > 0) {
+    for (const i of cloud) {
+      for (const j of besides(i)) {
+        if (j >= 0 && seen[j] === 0 && isCloud(j)) {
           seen[j] = 1;
-          cloud[todo++] = j;
+          cloud.push(j);
         }
       }
     }
-    if (size < least) {
-      for (let k = 0; k < size; k++) {
-        out[cloud[k] * 4] = 0;
-        out[cloud[k] * 4 + 1] = 0;
-      }
+    return cloud;
+  };
+  range(w * h).forEach((start) => {
+    if (seen[start] === 1 || !isCloud(start)) {
+      return;
     }
-  }
+    const cloud = cloudFrom(start);
+    if (cloud.length < smallest / 4) {
+      cloud.forEach((k) => {
+        out[k * 4] = 0;
+        out[k * 4 + 1] = 0;
+      });
+    }
+  });
   return { pixels: out, width: w, height: h };
-}
+};
 
 export const WIND = { near: 18, far: 8 };
 const GUSTS = [
   [0.45, 23, 0],
   [0.25, 8.7, 1.1],
 ] as const;
-export function drift(seconds: number, mean: number, lag = 0) {
-  let d = seconds;
-  for (const [share, period, phase] of GUSTS) {
+export const drift = (seconds: number, mean: number, lag = 0): number =>
+  GUSTS.reduce((d, [share, period, phase]) => {
     const w = (2 * Math.PI) / period;
-    d += (share / w) * (Math.sin(w * (seconds - lag) + phase) - Math.sin(phase));
-  }
-  return d * mean;
-}
+    return d + (share / w) * (Math.sin(w * (seconds - lag) + phase) - Math.sin(phase));
+  }, seconds) * mean;
 
 const BILLOW = { across: 240, down: 120, x: 28, y: 12, drift: [14, -3] };
 const CURL = { across: 90, down: 30, x: 8, y: 5, drift: [-16, 4] };
@@ -313,106 +295,85 @@ const FAR_SCALE = 0.6;
 
 const NOISE_SIZE = 128;
 const NOISE_CELL = 16;
-function makeNoise() {
-  const lattice = NOISE_SIZE / NOISE_CELL;
-  let seed = 7;
-  const rand = () => {
-    seed = (seed + 0x6d_2b_79_f5) >>> 0;
-    let t = seed;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-  };
-  const out = new Float32Array(NOISE_SIZE * NOISE_SIZE * 4);
-  const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
-  const lo = new Int32Array(NOISE_SIZE);
-  const hi = new Int32Array(NOISE_SIZE);
-  const along = new Float64Array(NOISE_SIZE);
-  for (const [n, weight] of [
-    [lattice, 1],
-    [lattice * 2, 0.5],
-  ]) {
-    const values = new Float64Array(n * n * 4);
-    for (let i = 0; i < values.length; i++) {
-      values[i] = rand() * 2 - 1;
-    }
-    const step = NOISE_SIZE / n;
-    for (let x = 0; x < NOISE_SIZE; x++) {
-      const g = x / step;
-      lo[x] = Math.floor(g);
-      hi[x] = (lo[x] + 1) % n;
-      along[x] = fade(g - lo[x]);
-    }
-    for (let y = 0; y < NOISE_SIZE; y++) {
-      const top = lo[y] * n;
-      const bottom = hi[y] * n;
-      const v = along[y];
-      for (let x = 0; x < NOISE_SIZE; x++) {
-        const u = along[x];
-        const ia = (top + lo[x]) * 4;
-        const ib = (top + hi[x]) * 4;
-        const ic = (bottom + lo[x]) * 4;
-        const id = (bottom + hi[x]) * 4;
-        const o = (y * NOISE_SIZE + x) * 4;
-        for (let k = 0; k < 4; k++) {
-          const a = values[ia + k];
-          const b = values[ib + k];
-          const c = values[ic + k];
-          const d = values[id + k];
-          out[o + k] += weight * (a + (b - a) * u + (c - a + (d - c - b + a) * u) * v);
-        }
-      }
-    }
-  }
-  let most = 0;
-  for (const v of out) {
-    most = Math.max(most, Math.abs(v));
-  }
-  for (let i = 0; i < out.length; i++) {
-    out[i] /= most;
-  }
-  return out;
-}
+const LATTICE = NOISE_SIZE / NOISE_CELL;
 
-function slideMost(
+const randomAt = (k: number): number => {
+  const s = (7 + k * 0x6d_2b_79_f5) >>> 0;
+  const a = Math.imul(s ^ (s >>> 15), s | 1);
+  const b = a ^ (a + Math.imul(a ^ (a >>> 7), a | 61));
+  return ((b ^ (b >>> 14)) >>> 0) / 4_294_967_296;
+};
+
+const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+
+const octave = (n: number, first: number) => {
+  const values = Float64Array.from(
+    { length: n * n * 4 },
+    (_, i) => randomAt(first + i + 1) * 2 - 1,
+  );
+  const step = NOISE_SIZE / n;
+  const lo = Int32Array.from({ length: NOISE_SIZE }, (_, x) => Math.floor(x / step));
+  const hi = lo.map((l) => (l + 1) % n);
+  const along = Float64Array.from(lo, (l, x) => fade(x / step - l));
+  return (i: number) => {
+    const k = i % 4;
+    const p = (i - k) / 4;
+    const x = p % NOISE_SIZE;
+    const y = (p - x) / NOISE_SIZE;
+    const u = along[x];
+    const v = along[y];
+    const a = values[(lo[y] * n + lo[x]) * 4 + k];
+    const b = values[(lo[y] * n + hi[x]) * 4 + k];
+    const c = values[(hi[y] * n + lo[x]) * 4 + k];
+    const d = values[(hi[y] * n + hi[x]) * 4 + k];
+    return a + (b - a) * u + (c - a + (d - c - b + a) * u) * v;
+  };
+};
+
+const makeNoise = (): Float32Array => {
+  const octaves = [
+    [octave(LATTICE, 0), 1],
+    [octave(LATTICE * 2, LATTICE * LATTICE * 4), 0.5],
+  ] as const;
+  const raw = Float32Array.from({ length: NOISE_SIZE * NOISE_SIZE * 4 }, (_, i) =>
+    octaves.reduce((sum, [at, weight]) => Math.fround(sum + weight * at(i)), 0),
+  );
+  const most = raw.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+  return raw.map((v) => v / most);
+};
+const sharedNoise = once(makeNoise);
+
+const slideMost = (
   line: Uint8Array,
   r: number,
   fore: Uint8Array,
   back: Uint8Array,
   most: Uint8Array,
-) {
+) => {
   const n = line.length;
   const w = 2 * r + 1;
   for (let b = 0; b < n; b += w) {
     const e = Math.min(b + w, n);
-    let m = line[b];
-    fore[b] = m;
+    fore[b] = line[b];
     for (let p = b + 1; p < e; p++) {
-      const v = line[p];
-      if (v > m) {
-        m = v;
-      }
-      fore[p] = m;
+      fore[p] = Math.max(fore[p - 1], line[p]);
     }
-    m = line[e - 1];
-    back[e - 1] = m;
+    back[e - 1] = line[e - 1];
     for (let p = e - 2; p >= b; p--) {
-      const v = line[p];
-      if (v > m) {
-        m = v;
-      }
-      back[p] = m;
+      back[p] = Math.max(back[p + 1], line[p]);
     }
   }
   for (let k = 0; k < most.length; k++) {
     most[k] = Math.max(back[k], fore[k + w - 1]);
   }
-}
+};
 
 const BAND_BITS = 7;
 const BAND = 1 << BAND_BITS;
 
-function reachBand(layer: CloudLayer, rx: number, ry: number, x0: number, out: Uint8Array) {
+const wrapIndex = (k: number, n: number) => (k < 0 || k >= n ? ((k % n) + n) % n : k);
+
+const reachBand = (layer: CloudLayer, rx: number, ry: number, x0: number, out: Uint8Array) => {
   const { pixels, width: lw, height: lh } = layer;
   const bw = Math.min(lw, x0 + BAND) - x0;
   const across = new Uint8Array(bw * lh);
@@ -421,11 +382,7 @@ function reachBand(layer: CloudLayer, rx: number, ry: number, x0: number, out: U
   const rowBack = new Uint8Array(row.length);
   for (let j = 0; j < lh; j++) {
     for (let p = 0; p < row.length; p++) {
-      let k = x0 + p - rx;
-      if (k < 0 || k >= lw) {
-        k = ((k % lw) + lw) % lw;
-      }
-      row[p] = pixels[(j * lw + k) * 4 + 1];
+      row[p] = pixels[(j * lw + wrapIndex(x0 + p - rx, lw)) * 4 + 1];
     }
     slideMost(row, rx, rowFore, rowBack, across.subarray(j * bw, j * bw + bw));
   }
@@ -442,13 +399,15 @@ function reachBand(layer: CloudLayer, rx: number, ry: number, x0: number, out: U
       out[j * lw + x0 + i] = most[j];
     }
   }
-}
+};
 
-export function reachOf(layer: CloudLayer, rx: number, ry: number) {
+type Reach = (x: number, y: number) => number;
+
+export const reachOf = (layer: CloudLayer, rx: number, ry: number): Reach => {
   const { width: lw, height: lh } = layer;
   const out = new Uint8Array(lw * lh);
   const done = new Uint8Array(Math.ceil(lw / BAND));
-  return (x: number, y: number): number => {
+  return (x, y) => {
     const i = wrap(Math.floor(x / 2), lw);
     const j = Math.min(lh - 1, Math.max(0, Math.floor(y / 2)));
     const b = i >> BAND_BITS;
@@ -458,9 +417,7 @@ export function reachOf(layer: CloudLayer, rx: number, ry: number) {
     }
     return out[j * lw + i];
   };
-}
-
-export type SkyCells = ReturnType<typeof skyCells>;
+};
 
 export type StillSky = {
   columns: number;
@@ -471,24 +428,56 @@ export type StillSky = {
   rgb: Record<SkyTheme, ArrayLike<number>>;
 };
 
+export type CellAt = (
+  x0: number,
+  y0: number,
+  cw: number,
+  ch: number,
+  out: number[],
+  shown?: number,
+  pushX?: number,
+  pushY?: number,
+) => number;
+
+export type SkyCells = Readonly<{ at: (seconds: number, theme: SkyTheme) => CellAt }>;
+
+type Clouds = Readonly<{
+  noise: Float32Array;
+  near: CloudLayer;
+  nearWide: Reach;
+  nearAround: Reach;
+  farWide: Reach;
+  farAround: Reach;
+}>;
+
+type Moment = {
+  seconds: number;
+  look: Look;
+  map: ArrayLike<number>;
+  clouds: Clouds | null;
+  nearShift: number;
+  farShift: number;
+};
+
 export const OPEN_SKY = -3;
 
-export function skyCells(o: {
+export const skyCells = ({
+  still,
+  shapes,
+  near,
+  far,
+}: {
   still: StillSky;
   near: CloudLayer;
   far: CloudLayer;
   shapes: Float32Array;
-}) {
-  const { still, shapes, near, far } = o;
+}): SkyCells => {
   const { columns, rows } = still;
-  const density = new Float32Array(columns * rows);
-  still.text.split("\n").forEach((line, r) => {
-    if (r >= rows) {
-      return;
-    }
-    for (let c = 0; c < Math.min(columns, line.length); c++) {
-      density[r * columns + c] = Math.max(0, SKY_RAMP.indexOf(line[c])) / (SKY_RAMP.length - 1);
-    }
+  const lines = still.text.split("\n");
+  const density = Float32Array.from({ length: columns * rows }, (_, i) => {
+    const c = i % columns;
+    const glyph = lines[(i - c) / columns]?.[c];
+    return glyph === undefined ? 0 : Math.max(0, SKY_RAMP.indexOf(glyph)) / (SKY_RAMP.length - 1);
   });
   const stillAt = (x: number, y: number) => {
     const c = wrap(Math.floor(x / still.cw), columns);
@@ -518,32 +507,7 @@ export function skyCells(o: {
     out[1] = pixels[ia + 1] * wa + pixels[ib + 1] * wb + pixels[ic + 1] * wc + pixels[id + 1] * wd;
   };
 
-  let noise = new Float32Array(0);
-  const wide = (layer: CloudLayer, scale: number) =>
-    reachOf(
-      layer,
-      REACH + Math.ceil(((BILLOW.x + CURL.x) * scale) / 2),
-      REACH + Math.ceil(((BILLOW.y + CURL.y) * scale) / 2),
-    );
-  const findClouds = (smallest: number) => {
-    if (noise.length === 0) {
-      noise = makeNoise();
-    }
-    const nearer = smallest > 0 ? bigClouds(near, smallest) : near;
-    return {
-      near: nearer,
-      nearAround: reachOf(nearer, REACH, REACH),
-      farAround: reachOf(far, REACH, REACH),
-      nearWide: wide(nearer, 1),
-      farWide: wide(far, FAR_SCALE),
-    };
-  };
-  const found: Partial<Record<SkyTheme, ReturnType<typeof findClouds>>> = {};
-
-  const cover = new Float32Array(256);
-  for (let v = 0; v < 256; v++) {
-    cover[v] = smooth(0.2, 0.7, v / 255);
-  }
+  const cover = Float32Array.from({ length: 256 }, (_, v) => smooth(0.2, 0.7, v / 255));
   const want = new Float32Array(6);
   const tile = [0, 0, 0];
   const n = new Float32Array(2);
@@ -566,8 +530,8 @@ export function skyCells(o: {
     let shownD = shown === -1 ? bestD : Number.POSITIVE_INFINITY;
     for (let e = 0; e < EDGE.length; e++) {
       const g = EDGE[e];
-      let d = EDGE_COST[e];
       const s = g * 6;
+      let d = EDGE_COST[e];
       for (let k = 0; k < 6; k++) {
         const diff = shapes[s + k] - want[k];
         d += diff * diff;
@@ -592,7 +556,7 @@ export function skyCells(o: {
   };
 
   const grain = new Float32Array(4);
-  const noiseAt = (u: number, v: number, out: Float32Array) => {
+  const noiseAt = (noise: Float32Array, u: number, v: number, out: Float32Array) => {
     const fu = wrap(u, NOISE_SIZE);
     const fv = wrap(v, NOISE_SIZE);
     const x0 = fu | 0;
@@ -612,18 +576,18 @@ export function skyCells(o: {
     }
   };
 
-  let time = 0;
-  let nearShift = 0;
-  let farShift = 0;
-  const at = (seconds: number) => {
-    time = seconds;
-    nearShift = drift(seconds, WIND.near);
-    farShift = drift(seconds, WIND.far, 3);
-  };
-
-  const shapeAt = (u: number, y: number, scale: number, seed: number, out: Float32Array) => {
+  const shapeAt = (
+    noise: Float32Array,
+    time: number,
+    u: number,
+    y: number,
+    scale: number,
+    seed: number,
+    out: Float32Array,
+  ) => {
     const s = NOISE_CELL / scale;
     noiseAt(
+      noise,
       ((u + BILLOW.drift[0] * time) * s) / BILLOW.across + seed,
       ((y + BILLOW.drift[1] * time) * s) / BILLOW.down + seed * 0.7,
       grain,
@@ -633,6 +597,7 @@ export function skyCells(o: {
     const shade = grain[2];
     const fray = grain[3];
     noiseAt(
+      noise,
       ((u + CURL.drift[0] * time) * s) / CURL.across + 61.3 + seed,
       ((y + CURL.drift[1] * time) * s) / CURL.down + 17.9 + seed,
       grain,
@@ -650,51 +615,71 @@ export function skyCells(o: {
     return cover[toByte(frayed)];
   };
 
-  const cell = (
-    x0: number,
-    y0: number,
-    cw: number,
-    ch: number,
-    theme: SkyTheme,
-    out: number[],
-    shown = -1,
-    pushX = 0,
-    pushY = 0,
-  ) => {
+  const now: Moment = {
+    seconds: 0,
+    look: THEMES.light,
+    map: still.rgb.light,
+    clouds: null,
+    nearShift: 0,
+    farShift: 0,
+  };
+  const wide = (layer: CloudLayer, scale: number) =>
+    reachOf(
+      layer,
+      REACH + Math.ceil(((BILLOW.x + CURL.x) * scale) / 2),
+      REACH + Math.ceil(((BILLOW.y + CURL.y) * scale) / 2),
+    );
+  const findClouds = (smallest: number): Clouds => {
+    const nearer = smallest > 0 ? bigClouds(near, smallest) : near;
+    return {
+      noise: sharedNoise(),
+      near: nearer,
+      nearWide: wide(nearer, 1),
+      nearAround: reachOf(nearer, REACH, REACH),
+      farWide: wide(far, FAR_SCALE),
+      farAround: reachOf(far, REACH, REACH),
+    };
+  };
+  const nearHere = (x: number, y: number) => {
+    const { clouds } = now;
+    if (!clouds || clouds.nearWide(x, y) < 3) {
+      return false;
+    }
+    shapeAt(clouds.noise, now.seconds, x, y, 1, 0, nearShape);
+    return clouds.nearAround(x + nearShape[0], y + nearShape[1]) >= 3;
+  };
+  const farHere = (x: number, y: number) => {
+    const { clouds } = now;
+    if (!(clouds && now.look.far) || clouds.farWide(x, y) < 3) {
+      return false;
+    }
+    shapeAt(clouds.noise, now.seconds, x, y, FAR_SCALE, 37.1, farShape);
+    return clouds.farAround(x + farShape[0], y + farShape[1]) >= 3;
+  };
+  const cloudsOf: Record<SkyTheme, () => Clouds> = {
+    light: once(() => findClouds(THEMES.light.smallest)),
+    dark: once(() => findClouds(THEMES.dark.smallest)),
+    vice: once(() => findClouds(THEMES.vice.smallest)),
+  };
+
+  const cellAt: CellAt = (x0, y0, cw, ch, out, shown = -1, pushX = 0, pushY = 0) => {
+    const { look, map, clouds, nearShift, farShift } = now;
+    const nearer = clouds ? clouds.near : near;
     const cx = x0 + cw / 2;
     const cy = y0 + ch / 2;
     const i = stillAt(cx, cy);
-    const map = still.rgb[theme];
     const left = x0 - pushX;
     const top = y0 - pushY;
     const lx = cx - pushX;
     const ly = cy - pushY;
-    let hasNear = false;
-    let hasFar = false;
-    const t = THEMES[theme];
-    let nearer = near;
-    if (t.clouds) {
-      found[theme] ??= findClouds(t.smallest);
-      const c = found[theme];
-      nearer = c.near;
-      hasNear = c.nearWide(lx - nearShift, ly) >= 3;
-      hasFar = t.far && c.farWide(lx - farShift, ly) >= 3;
-      if (hasNear) {
-        shapeAt(lx - nearShift, ly, 1, 0, nearShape);
-        hasNear = c.nearAround(lx - nearShift + nearShape[0], ly + nearShape[1]) >= 3;
-      }
-      if (hasFar) {
-        shapeAt(lx - farShift, ly, FAR_SCALE, 37.1, farShape);
-        hasFar = c.farAround(lx - farShift + farShape[0], ly + farShape[1]) >= 3;
-      }
-    }
+    const hasNear = nearHere(lx - nearShift, ly);
+    const hasFar = farHere(lx - farShift, ly);
     for (let k = 0; k < 3; k++) {
-      const v = map[i * 4 + k];
-      out[k] = v;
-      out[4 + k] = v;
+      out[k] = map[i * 4 + k];
+      out[4 + k] = map[i * 4 + k];
     }
     out[3] = density[i];
-    const wash = t.wash[0] + (t.wash[1] - t.wash[0]) * density[i];
+    const wash = look.wash[0] + (look.wash[1] - look.wash[0]) * density[i];
     out[7] = wash;
     if (!(hasNear || hasFar)) {
       return OPEN_SKY;
@@ -704,23 +689,19 @@ export function skyCells(o: {
     let most = 0;
     let shaded = 0;
     let nearSum = 0;
-    let aN = 0;
-    let aF = 0;
-    let sN = 0;
-    let sF = 0;
     for (let k = 0; k < 6; k++) {
       const x = left + REGIONS[k][0] * cw;
       const y = top + REGIONS[k][1] * ch;
       if (hasNear) {
         sample(nearer, x - nearShift + nearShape[0], y + nearShape[1], n);
-        aN = covered(n[1], nearShape[2]);
-        sN = toByte(n[0] + nearShape[3]);
       }
       if (hasFar) {
         sample(far, x - farShift + farShape[0], y + farShape[1], f);
-        aF = covered(f[1], farShape[2]);
-        sF = toByte(f[0] + farShape[3]);
       }
+      const aN = hasNear ? covered(n[1], nearShape[2]) : 0;
+      const sN = hasNear ? toByte(n[0] + nearShape[3]) : 0;
+      const aF = hasFar ? covered(f[1], farShape[2]) : 0;
+      const sF = hasFar ? toByte(f[0] + farShape[3]) : 0;
       const a = aN + aF * (1 - aN);
       want[k] = a * EDGE_INK;
       bare = Math.min(bare, a);
@@ -738,7 +719,7 @@ export function skyCells(o: {
     const u = Math.floor((lx - (onNear ? nearShift : farShift)) / cw);
     const v = Math.floor(ly / ch);
     const inside = coverage >= 0.6 && bare >= 0.3;
-    lerp(t.tile, shade, tile);
+    lerp(look.tile, shade, tile);
     const a =
       (inside ? smooth(0.55, 0.9, coverage) : 0.8 * smooth(0.15, 0.9, coverage)) *
       (onNear ? 1 : 0.85);
@@ -748,17 +729,30 @@ export function skyCells(o: {
     }
     out[7] = tileAlpha;
     if (inside) {
-      lerp(t.glyph, shade, out);
+      lerp(look.glyph, shade, out);
       const jitter = (hash(u, v, onNear ? 3 : 5) - 0.5) * 1.5;
-      return shadeGlyph(t.inside, shade, jitter, shown);
+      return shadeGlyph(look.inside, shade, jitter, shown);
     }
     const best = shapeGlyph(shown);
     if (best < 0) {
       return want[5] < EDGE_INK * 0.35 ? OPEN_SKY : -1;
     }
-    lerp(t.edge, shade, out);
+    lerp(look.edge, shade, out);
     return best;
   };
 
-  return { at, cell };
-}
+  const at = (seconds: number, theme: SkyTheme): CellAt => {
+    const look = THEMES[theme];
+    Object.assign(now, {
+      seconds,
+      look,
+      map: still.rgb[theme],
+      clouds: look.clouds ? cloudsOf[theme]() : null,
+      nearShift: drift(seconds, WIND.near),
+      farShift: drift(seconds, WIND.far, 3),
+    });
+    return cellAt;
+  };
+
+  return { at };
+};

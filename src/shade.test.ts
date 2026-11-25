@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { createAir } from "./air.ts";
-import { GLYPHS, OPEN_SKY, SKY_RAMP, type SkyCells } from "./cells.ts";
+import { GLYPHS, OPEN_SKY, range, SKY_RAMP, type SkyCells } from "./cells.ts";
 import {
   breathing,
   createFrame,
@@ -24,36 +24,32 @@ const CLOUD = GLYPHS.indexOf("8");
 const sky = (density: number) =>
   GLYPHS.indexOf(SKY_RAMP[Math.round(density * (SKY_RAMP.length - 1))]);
 
-function fakeCells(density: number, cloudFrom = Number.POSITIVE_INFINITY) {
+const fakeCells = (density: number, cloudFrom = Number.POSITIVE_INFINITY) => {
   const seen = { cells: 0, push: [0, 0] };
   const cells: SkyCells = {
-    at: () => undefined,
-    cell: (x0, _y0, _cw, _ch, _theme, out, _shown, pushX = 0, pushY = 0) => {
-      seen.cells++;
-      if (pushX || pushY) {
-        seen.push = [pushX, pushY];
-      }
-      out[0] = 100;
-      out[1] = 150;
-      out[2] = 200;
-      out[3] = density;
-      out[4] = 220;
-      out[5] = 220;
-      out[6] = 220;
-      out[7] = 0.3;
-      return x0 >= cloudFrom ? CLOUD : OPEN_SKY;
-    },
+    at:
+      () =>
+      (x0, _y0, _cw, _ch, out, _shown, pushX = 0, pushY = 0) => {
+        seen.cells += 1;
+        if (pushX || pushY) {
+          seen.push = [pushX, pushY];
+        }
+        [100, 150, 200, density, 220, 220, 220, 0.3].forEach((v, k) => {
+          out[k] = v;
+        });
+        return x0 >= cloudFrom ? CLOUD : OPEN_SKY;
+      },
   };
   return { cells, seen };
-}
+};
 
-function setup(width = 400, height = 240, faint = 0, night?: Stars) {
+const setup = (width = 400, height = 240, faint = 0, night?: Stars) => {
   const grid = layoutGrid(width, height, 1, width, CELL, faint);
   const n = grid.cols * grid.rows * 4;
   const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n), night);
   const air = createAir(grid.cols, grid.rows, grid.cw, grid.ch);
   return { grid, frame, air };
-}
+};
 
 describe("shadeFrame", () => {
   test("draws every cell in the first frame", () => {
@@ -61,10 +57,7 @@ describe("shadeFrame", () => {
     assert.ok(frame.shown.every((v) => v === UNDRAWN));
     const changed = shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light");
     assert.equal(changed, grid.cols * grid.rows);
-    assert.deepEqual(
-      [...frame.changed.subarray(0, changed)],
-      Array.from({ length: changed }, (_, k) => k),
-    );
+    assert.deepEqual([...frame.changed.subarray(0, changed)], range(changed));
   });
 
   test("redraws nothing when nothing has moved", () => {
@@ -75,31 +68,30 @@ describe("shadeFrame", () => {
   });
 
   test("draws open sky as a glyph as dense as the painting's blue, on its tile", () => {
-    for (const [density, glyph] of [
-      [0, "."],
-      [0.5, "o"],
-      [1, "@"],
-    ] as const) {
+    (
+      [
+        [0, "."],
+        [0.5, "o"],
+        [1, "@"],
+      ] as const
+    ).forEach(([density, glyph]) => {
       const { grid, frame, air } = setup();
       shadeFrame(grid, fakeCells(density).cells, air, frame, 0, "light");
       assert.equal(frame.shown[0], GLYPHS.indexOf(glyph), `density ${density}`);
       assert.ok(frame.tiles[3] > 0);
-    }
+    });
   });
 
   test("lets open sky breathe in strength, not in glyph", () => {
     const { grid, frame, air } = setup();
     const { cells } = fakeCells(0.5);
-    const alphas = new Set<number>();
-    for (let t = 0; t < 20; t += 0.5) {
-      shadeFrame(grid, cells, air, frame, t, "light");
-      alphas.add(frame.colours[3]);
+    const alphas = range(40).map((i) => {
+      shadeFrame(grid, cells, air, frame, i / 2, "light");
       assert.equal(frame.shown[0], sky(0.5));
-    }
-    assert.ok(alphas.size > 3);
-    for (const a of alphas) {
-      assert.ok(a >= 0.86 * 0.9 * 255 - 1 && a <= 255);
-    }
+      return frame.colours[3];
+    });
+    assert.ok(new Set(alphas).size > 3);
+    assert.ok(alphas.every((a) => a >= 0.86 * 0.9 * 255 - 1 && a <= 255));
   });
 
   test("draws clouds' glyphs as they are, in full", () => {
@@ -153,18 +145,13 @@ describe("faint rows", () => {
       shadeFrame(grid, cells, air, frame, 0, "light", half);
       return seen.cells;
     };
-    let full = 0;
-    const turn = [0, 0];
-    for (let r = 0; r < grid.rows; r++) {
-      if (r < grid.faintRow) {
-        full += grid.cols;
-      } else {
-        turn[r & 1] += grid.cols;
-      }
-    }
+    const rows = range(grid.rows);
+    const full = rows.filter((r) => r < grid.faintRow).length * grid.cols;
+    const turn = (half: number) =>
+      rows.filter((r) => r >= grid.faintRow && (r & 1) === half).length * grid.cols;
     assert.ok(grid.faintRow < grid.rows);
-    assert.equal(asked(0), full + turn[0]);
-    assert.equal(asked(1), full + turn[1]);
+    assert.equal(asked(0), full + turn(0));
+    assert.equal(asked(1), full + turn(1));
   });
 
   test("are all worked out when asked for every row", () => {
@@ -180,15 +167,17 @@ describe("turns", () => {
     const { grid, frame, air } = setup(400, 240);
     const { cells, seen } = fakeCells(0.5);
     shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
-    let total = 0;
-    for (let turn = 0; turn < 3; turn++) {
+    const counts = range(3).map((turn) => {
       seen.cells = 0;
       shadeFrame(grid, cells, air, frame, 0, "light", 0, 3, turn);
-      const rows = Array.from({ length: grid.rows }, (_, r) => r).filter((r) => r % 3 === turn);
+      const rows = range(grid.rows).filter((r) => r % 3 === turn);
       assert.equal(seen.cells, rows.length * grid.cols);
-      total += seen.cells;
-    }
-    assert.equal(total, grid.rows * grid.cols);
+      return seen.cells;
+    });
+    assert.equal(
+      counts.reduce((a, b) => a + b, 0),
+      grid.rows * grid.cols,
+    );
   });
 
   test("still work out the cells the air is moving, every frame", () => {
@@ -201,7 +190,7 @@ describe("turns", () => {
     air.dx[k + 1] = 3;
     seen.cells = 0;
     shadeFrame(grid, cells, air, frame, 0, "light", 0, 3, 0);
-    const due = Array.from({ length: grid.rows }, (_, r) => r).filter((r) => r % 3 === 0);
+    const due = range(grid.rows).filter((r) => r % 3 === 0);
     assert.equal(seen.cells, due.length * grid.cols + 2);
   });
 });
@@ -284,10 +273,10 @@ describe("breathing", () => {
   test("gives every cell its own phase and a pace, the same each time", () => {
     const a = breathing(30, 20);
     assert.deepEqual(a, breathing(30, 20));
-    for (let i = 0; i < a.length; i += 2) {
-      assert.ok(a[i] >= 0 && a[i] < Math.PI * 2 + 1e-6);
-      assert.ok(a[i + 1] >= 0.25 && a[i + 1] < 1.15 + 1e-6);
-    }
+    range(a.length / 2).forEach((k) => {
+      assert.ok(a[k * 2] >= 0 && a[k * 2] < Math.PI * 2 + 1e-6);
+      assert.ok(a[k * 2 + 1] >= 0.25 && a[k * 2 + 1] < 1.15 + 1e-6);
+    });
     assert.ok(new Set(a).size > a.length * 0.9);
   });
 });
@@ -295,12 +284,14 @@ describe("breathing", () => {
 const SKY = 2400;
 
 describe("layoutGrid", () => {
-  for (const [width, dpr] of [
-    [1440, 2],
-    [390, 2],
-    [1366.5, 1],
-    [822, 3],
-  ] as const) {
+  (
+    [
+      [1440, 2],
+      [390, 2],
+      [1366.5, 1],
+      [822, 3],
+    ] as const
+  ).forEach(([width, dpr]) => {
     const g = layoutGrid(width, 700, dpr, SKY, CELL);
 
     test(`${width} px: cells are the size asked for`, () => {
@@ -316,18 +307,18 @@ describe("layoutGrid", () => {
     });
 
     test(`${width} px: cells tile the canvas without gaps or overlaps`, () => {
-      for (let c = 0; c + 1 < g.cols; c++) {
+      range(g.cols - 1).forEach((c) => {
         assert.equal(g.left[c] + g.across[c], g.left[c + 1]);
-      }
-      for (let r = 0; r + 1 < g.rows; r++) {
+      });
+      range(g.rows - 1).forEach((r) => {
         assert.equal(g.top[r] + g.down[r], g.top[r + 1]);
-      }
+      });
     });
 
     test(`${width} px: the still sky is centred`, () => {
       assert.equal(g.skyX + width / 2, SKY / 2);
     });
-  }
+  });
 
   test("turns faint from the first row wholly below the faint line", () => {
     const g = layoutGrid(390, 700, 2, SKY, CELL, 280);
@@ -346,13 +337,13 @@ describe("layoutGrid", () => {
   });
 });
 
-function seeded(seed = 1) {
-  let s = seed;
+const seeded = (seed = 1) => {
+  const state = { s: seed };
   return () => {
-    s = (s * 1_664_525 + 1_013_904_223) >>> 0;
-    return s / 4_294_967_296;
+    state.s = (state.s * 1_664_525 + 1_013_904_223) >>> 0;
+    return state.s / 4_294_967_296;
   };
-}
+};
 const shown = (code: Int16Array) => [...code].filter((c) => c >= 0).length;
 
 describe("sparkles", () => {
@@ -360,38 +351,37 @@ describe("sparkles", () => {
     const sp = createSparkles(60, 40);
     const random = seeded(3);
     const star = (c: number, r: number) => (c * 7 + r * 13) % 11 === 0;
-    for (let i = 0; i < 40; i++) {
+    range(40).forEach(() => {
       stepSparkles(sp, TICK, 20, star, random);
-    }
-    for (const s of sp.pool) {
-      if (!s.steps) {
-        continue;
-      }
-      assert.ok(star(s.c, s.r));
-      assert.ok(s.r >= 1 && s.r < 20);
-    }
+    });
+    sp.pool
+      .filter((s) => s.steps)
+      .forEach((s) => {
+        assert.ok(star(s.c, s.r));
+        assert.ok(s.r >= 1 && s.r < 20);
+      });
     assert.ok(shown(sp.code) > 0);
   });
 
   test("never more than so many at once", () => {
     const sp = createSparkles(80, 40);
     const random = seeded(5);
-    for (let i = 0; i < 200; i++) {
+    range(200).forEach(() => {
       stepSparkles(sp, TICK, 40, () => true, random);
       assert.ok(sp.pool.filter((s) => s.steps).length <= MOST.big + MOST.small);
-    }
+    });
   });
 
   test("glint and go: with no stars nothing new starts, and the rest goes out", () => {
     const sp = createSparkles(60, 30);
     const random = seeded(7);
-    for (let i = 0; i < 20; i++) {
+    range(20).forEach(() => {
       stepSparkles(sp, TICK, 30, () => true, random);
-    }
+    });
     assert.ok(shown(sp.code) > 0);
-    for (let i = 0; i < 20; i++) {
+    range(20).forEach(() => {
       stepSparkles(sp, TICK, 30, () => false, random);
-    }
+    });
     assert.equal(shown(sp.code), 0);
     assert.ok(sp.pool.every((s) => !s.steps));
   });
@@ -401,27 +391,24 @@ describe("sparkles", () => {
     stepSparkles(sp, TICK, 30, () => true, seeded(9));
     const drawn = [...sp.code.keys()].filter((k) => sp.code[k] >= 0);
     assert.ok(drawn.length > 0);
-    for (const k of drawn) {
+    drawn.forEach((k) => {
       assert.equal(sp.touched[k], 1);
       assert.equal(sp.touchedRows[Math.floor(k / sp.cols)], 1);
-    }
+    });
   });
 
   test("draw a sparkle's glyphs", () => {
     const sp = createSparkles(60, 30);
     const random = seeded(11);
-    const seen = new Set<string>();
-    for (let i = 0; i < 100; i++) {
-      stepSparkles(sp, TICK, 30, () => true, random);
-      for (const c of sp.code) {
-        if (c >= 0) {
-          seen.add(GLYPHS[c]);
-        }
-      }
-    }
-    for (const glyph of [".", "+", "*", "-", "|"]) {
+    const seen = new Set(
+      range(100).flatMap(() => {
+        stepSparkles(sp, TICK, 30, () => true, random);
+        return [...sp.code].filter((c) => c >= 0).map((c) => GLYPHS[c]);
+      }),
+    );
+    [".", "+", "*", "-", "|"].forEach((glyph) => {
       assert.ok(seen.has(glyph), glyph);
-    }
+    });
   });
 
   test("wait for a whole tick before moving", () => {
@@ -435,12 +422,14 @@ describe("sparkles", () => {
 
 describe("sine", () => {
   test("is within 3e-7 of Math.sin, near and far from 0, either side", () => {
-    let worst = 0;
-    for (const base of [0, 1e3, 1e5, -50]) {
-      for (let a = base; a < base + 20; a += 0.0007) {
-        worst = Math.max(worst, Math.abs(sine(a) - Math.sin(a)));
-      }
-    }
+    const worst = Math.max(
+      ...[0, 1e3, 1e5, -50].flatMap((base) =>
+        range(Math.ceil(20 / 0.0007)).map((i) => {
+          const a = base + i * 0.0007;
+          return Math.abs(sine(a) - Math.sin(a));
+        }),
+      ),
+    );
     assert.ok(worst < 3e-7, `worst ${worst}`);
   });
 

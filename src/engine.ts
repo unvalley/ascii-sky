@@ -1,5 +1,12 @@
 import { type Air, blow, calm, createAir, fitAir, puff, stepAir } from "./air.ts";
-import { GLYPHS, measureGlyph, normaliseShapes, type SkyCells, type SkyTheme } from "./cells.ts";
+import {
+  GLYPHS,
+  measureGlyph,
+  normaliseShapes,
+  range,
+  type SkyCells,
+  type SkyTheme,
+} from "./cells.ts";
 import {
   type Cell,
   createFrame,
@@ -28,14 +35,52 @@ const RETRY_MS = 5000;
 const MOST_DPR = 3;
 export const CONTROLS = "a, button, input, textarea, select, label, [role]";
 
-export function beat(drawnAt: number, rate: number, now: number): number {
+export const beat = (drawnAt: number, rate: number, now: number): number => {
   const gap = 1000 / rate;
   const due = drawnAt + gap;
   if (now < due - EARLY_MS) {
     return Number.NaN;
   }
   return now - due < gap ? due : now;
-}
+};
+
+type Clock = Readonly<{ time: number; last: number; owed: number; drawnAt: number }>;
+
+const owing = (owed: number, steps = 0): Readonly<{ owed: number; steps: number }> => {
+  if (steps === MAX_STEPS) {
+    return { owed: 0, steps };
+  }
+  return owed >= STEP ? owing(owed - STEP, steps + 1) : { owed, steps };
+};
+
+const advance = (clock: Clock, now: number, due: number) => {
+  const dt = Math.min(MAX_DT, (now - clock.last) / 1000);
+  const { owed, steps } = owing(clock.owed + dt);
+  return { clock: { time: clock.time + dt, last: now, owed, drawnAt: due }, dt, steps };
+};
+
+type Pace = Readonly<{ rate: number; since: number; costs: readonly number[] }>;
+
+const paced = (pace: Pace, rate: number, now: number): Pace =>
+  rate === pace.rate ? pace : { rate, since: now, costs: [] };
+
+const retried = (pace: Pace, now: number): Pace =>
+  pace.rate === HALF_RATE && now - pace.since >= RETRY_MS ? paced(pace, FULL_RATE, now) : pace;
+
+const median = (values: readonly number[]) => [...values].sort((a, b) => a - b)[values.length >> 1];
+
+const timed = (pace: Pace, cost: number, now: number): Pace => {
+  const costs = [...pace.costs, cost];
+  if (costs.length < PACE_FRAMES) {
+    return { ...pace, costs };
+  }
+  const ms = median(costs);
+  const counted = { ...pace, costs: [] };
+  if (ms > SLOW_MS) {
+    return paced(counted, HALF_RATE, now);
+  }
+  return ms < QUICK_MS ? paced(counted, FULL_RATE, now) : counted;
+};
 
 const FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
 const MEASURE = 8;
@@ -45,7 +90,7 @@ const PROBE = 100;
 
 type Ink = Readonly<{ up: number; down: number; left: number; right: number }>;
 
-export function fitGlyphs(ink: Ink, cw: number, ch: number) {
+export const fitGlyphs = (ink: Ink, cw: number, ch: number) => {
   const roomW = cw - GAP - 2 * PAD;
   const roomH = ch - GAP - 2 * PAD;
   const wide = ink.left + ink.right;
@@ -56,35 +101,32 @@ export function fitGlyphs(ink: Ink, cw: number, ch: number) {
     x: GAP + PAD + (roomW - wide * k) / 2 + ink.left * k,
     y: GAP + PAD + (roomH - tall * k) / 2 + ink.up * k,
   };
-}
+};
 
-function measureInk(ctx: CanvasRenderingContext2D): Ink {
+const measureInk = (ctx: CanvasRenderingContext2D): Ink => {
   ctx.font = `bold ${PROBE}px ${FONT}`;
-  let up = 0;
-  let down = 0;
-  let left = 0;
-  let right = 0;
-  for (const g of GLYPHS) {
-    const m = ctx.measureText(g);
-    up = Math.max(up, m.actualBoundingBoxAscent);
-    down = Math.max(down, m.actualBoundingBoxDescent);
-    left = Math.max(left, m.actualBoundingBoxLeft);
-    right = Math.max(right, m.actualBoundingBoxRight);
-  }
-  return { up, down, left, right };
-}
+  return GLYPHS.map((g) => ctx.measureText(g)).reduce(
+    (ink, m) => ({
+      up: Math.max(ink.up, m.actualBoundingBoxAscent),
+      down: Math.max(ink.down, m.actualBoundingBoxDescent),
+      left: Math.max(ink.left, m.actualBoundingBoxLeft),
+      right: Math.max(ink.right, m.actualBoundingBoxRight),
+    }),
+    { up: 0, down: 0, left: 0, right: 0 },
+  );
+};
 
-function context2d(canvas: HTMLCanvasElement, settings?: CanvasRenderingContext2DSettings) {
+const context2d = (canvas: HTMLCanvasElement, settings?: CanvasRenderingContext2DSettings) => {
   const ctx = canvas.getContext("2d", settings);
   if (!ctx) {
     throw new Error("ascii-sky: no 2d context");
   }
   return ctx;
-}
+};
 
 type Atlas = Readonly<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; gw: number }>;
 
-function drawAtlas(cw: number, ch: number, scale: number): Atlas {
+const drawAtlas = (cw: number, ch: number, scale: number): Atlas => {
   const gw = Math.ceil(cw * scale);
   const gh = Math.ceil(ch * scale);
   const canvas = document.createElement("canvas");
@@ -107,69 +149,68 @@ function drawAtlas(cw: number, ch: number, scale: number): Atlas {
     ctx.restore();
   });
   return { canvas, ctx, gw };
-}
+};
 
-export function measureShapes(cw: number, ch: number): Float32Array {
+export const measureShapes = (cw: number, ch: number): Float32Array => {
   const { canvas, ctx, gw } = drawAtlas(cw, ch, MEASURE);
   const gh = canvas.height;
   const ink = ctx.getImageData(0, 0, canvas.width, gh).data;
   return normaliseShapes(
-    GLYPHS.map((_, g) => {
-      const one = new Uint8ClampedArray(gw * gh);
-      for (let y = 0; y < gh; y++) {
-        for (let x = 0; x < gw; x++) {
-          one[y * gw + x] = ink[(y * canvas.width + g * gw + x) * 4 + 3];
-        }
-      }
-      return measureGlyph(one, gw, gh);
-    }),
+    range(GLYPHS.length).map((g) =>
+      measureGlyph(
+        Uint8ClampedArray.from({ length: gw * gh }, (_, i) => {
+          const x = i % gw;
+          return ink[(((i - x) / gw) * canvas.width + g * gw + x) * 4 + 3];
+        }),
+        gw,
+        gh,
+      ),
+    ),
   );
-}
+};
 
 const layer = (canvas = document.createElement("canvas")) => ({ canvas, ctx: context2d(canvas) });
 
-function createLayers(canvas: HTMLCanvasElement) {
-  return {
-    main: layer(canvas),
-    mask: layer(),
-    ink: layer(),
-    gaps: layer(),
-    tint: layer(),
-    tiles: layer(),
-  };
-}
+const createLayers = (canvas: HTMLCanvasElement) => ({
+  main: layer(canvas),
+  mask: layer(),
+  ink: layer(),
+  gaps: layer(),
+  tint: layer(),
+  tiles: layer(),
+});
 
 type Layers = ReturnType<typeof createLayers>;
 type Images = Readonly<{ colours: ImageData; tiles: ImageData }>;
 
-function sizeLayers(layers: Layers, grid: Grid): Images {
+const sizeLayers = (layers: Layers, grid: Grid): Images => {
   const { main, mask, ink, gaps, tint, tiles } = layers;
   const { pw, ph, cols, rows, dpr, originX, cw, ch } = grid;
-  for (const { canvas } of [main, mask, ink, gaps]) {
+  [main, mask, ink, gaps].forEach(({ canvas }) => {
     canvas.width = pw;
     canvas.height = ph;
-  }
-  for (const { canvas } of [tint, tiles]) {
+  });
+  [tint, tiles].forEach(({ canvas }) => {
     canvas.width = cols;
     canvas.height = rows;
-  }
+  });
   main.ctx.imageSmoothingEnabled = false;
   ink.ctx.imageSmoothingEnabled = false;
   const line = Math.max(1, Math.round(dpr));
   gaps.ctx.fillStyle = "#000";
-  for (let c = 0; c <= cols; c++) {
+  range(cols + 1).forEach((c) => {
     gaps.ctx.fillRect(Math.round((originX + c * cw) * dpr), 0, line, ph);
-  }
-  for (let r = 0; r <= rows; r++) {
+  });
+  range(rows + 1).forEach((r) => {
     gaps.ctx.fillRect(0, Math.round(r * ch * dpr), pw, line);
-  }
+  });
   return {
     colours: tint.ctx.createImageData(cols, rows),
     tiles: tiles.ctx.createImageData(cols, rows),
   };
-}
+};
 
-function stamp(layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: number) {
+const stamp = (layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: number) => {
   const mask = layers.mask.ctx;
   const { cols, left, across, top, down } = grid;
   for (let n = 0; n < count; n++) {
@@ -186,9 +227,9 @@ function stamp(layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: nu
       mask.drawImage(atlas.canvas, code * atlas.gw, 0, w, h, x, y, w, h);
     }
   }
-}
+};
 
-function composite(layers: Layers, grid: Grid, images: Images) {
+const composite = (layers: Layers, grid: Grid, images: Images) => {
   const { main, mask, ink, gaps, tint, tiles } = layers;
   const { cols, rows, cw, ch, dpr, originX } = grid;
   const toX = originX * dpr;
@@ -206,7 +247,7 @@ function composite(layers: Layers, grid: Grid, images: Images) {
   ink.ctx.drawImage(tint.canvas, 0, 0, cols, rows, toX, 0, toW, toH);
   main.ctx.globalCompositeOperation = "source-over";
   main.ctx.drawImage(ink.canvas, 0, 0);
-}
+};
 
 export type ThemeChoice = SkyTheme | "auto";
 
@@ -224,57 +265,75 @@ export type Sky = {
 
 type View = Readonly<{ grid: Grid; atlas: Atlas; frame: Frame; images: Images }>;
 
-export function startSky(
+type Running = {
+  choice: ThemeChoice;
+  theme: SkyTheme;
+  view: View | null;
+  air: Air;
+  clock: Clock;
+  pace: Pace;
+  drawn: number;
+  raf: number;
+  visible: boolean;
+};
+
+export const startSky = (
   canvas: HTMLCanvasElement,
   cells: SkyCells,
   skyWidth: number,
   cell: Cell,
   { theme: chosen = "auto", faintFrom, ignore = CONTROLS, night }: SkyOptions = {},
-): Sky {
+): Sky => {
   const layers = createLayers(canvas);
   const reduced = globalThis.matchMedia("(prefers-reduced-motion: reduce)");
   const darkScheme = globalThis.matchMedia("(prefers-color-scheme: dark)");
   const listening = new AbortController();
-  let choice = chosen;
-  const themeOf = (): SkyTheme => {
+  const { signal } = listening;
+  const themeOf = (choice: ThemeChoice): SkyTheme => {
     if (choice !== "auto") {
       return choice;
     }
     return darkScheme.matches ? "dark" : "light";
   };
 
-  let view: View | null = null;
-  let air: Air = createAir(0, 0, 1, 1);
-  let theme = themeOf();
-  let time = 0;
-  let last = 0;
-  let owed = 0;
-  let rate = FULL_RATE;
-  let rateSince = 0;
-  let drawnAt = Number.NEGATIVE_INFINITY;
-  const costs = new Float64Array(PACE_FRAMES);
-  const sorted = new Float64Array(PACE_FRAMES);
-  let costed = 0;
-  let drawn = 0;
-  let raf = 0;
-  let visible = true;
-  let stopped = false;
+  const sky: Running = {
+    choice: chosen,
+    theme: themeOf(chosen),
+    view: null,
+    air: createAir(0, 0, 1, 1),
+    clock: { time: 0, last: 0, owed: 0, drawnAt: Number.NEGATIVE_INFINITY },
+    pace: { rate: FULL_RATE, since: 0, costs: [] },
+    drawn: 0,
+    raf: 0,
+    visible: true,
+  };
 
   const isStar = (c: number, r: number) => {
-    if (!view) {
+    if (!sky.view) {
       return false;
     }
-    const { originX, cw, skyX } = view.grid;
-    return starAt(Math.floor((originX + c * cw + skyX) / cw), r, view.frame.night.stars);
+    const { originX, cw, skyX } = sky.view.grid;
+    return starAt(Math.floor((originX + c * cw + skyX) / cw), r, sky.view.frame.night.stars);
   };
 
   const draw = (half: number, every = TURNS) => {
+    const { view } = sky;
     if (!view) {
       return;
     }
     const { grid, atlas, frame, images } = view;
-    const turn = half === EVERY_ROW ? 0 : drawn % every;
-    const changed = shadeFrame(grid, cells, air, frame, time, theme, half, every, turn);
+    const turn = half === EVERY_ROW ? 0 : sky.drawn % every;
+    const changed = shadeFrame(
+      grid,
+      cells,
+      sky.air,
+      frame,
+      sky.clock.time,
+      sky.theme,
+      half,
+      every,
+      turn,
+    );
     stamp(layers, atlas, grid, frame, changed);
     composite(layers, grid, images);
     if (canvas.dataset.ready === undefined) {
@@ -291,7 +350,7 @@ export function startSky(
     const faint =
       faintFrom ??
       (Number.parseFloat(getComputedStyle(canvas).getPropertyValue("--sky-faint")) || 0);
-    const was = view?.grid;
+    const was = sky.view?.grid;
     if (
       was &&
       was.width === rect.width &&
@@ -302,92 +361,61 @@ export function startSky(
       return;
     }
     const grid = layoutGrid(rect.width, rect.height, dpr, skyWidth, cell, faint);
-    const atlas = view && was?.dpr === dpr ? view.atlas : drawAtlas(cell.cw, cell.ch, dpr);
+    const atlas = sky.view && was?.dpr === dpr ? sky.view.atlas : drawAtlas(cell.cw, cell.ch, dpr);
     const images = sizeLayers(layers, grid);
-    view = {
+    sky.view = {
       grid,
       atlas,
       images,
       frame: createFrame(grid, images.colours.data, images.tiles.data, night),
     };
-    air = fitAir(air, grid.cols, grid.rows, grid.cw, grid.ch);
-    drawn = 0;
+    sky.air = fitAir(sky.air, grid.cols, grid.rows, grid.cw, grid.ch);
+    sky.drawn = 0;
     draw(EVERY_ROW);
   };
 
-  const pace = (next: number, now: number) => {
-    if (next === rate) {
-      return;
-    }
-    rate = next;
-    rateSince = now;
-    costed = 0;
-  };
-
   const tick = (now: number) => {
-    raf = requestAnimationFrame(tick);
-    if (rate === HALF_RATE && now - rateSince >= RETRY_MS) {
-      pace(FULL_RATE, now);
-    }
-    const isCalm = !air.lively;
-    const due = beat(drawnAt, isCalm ? Math.min(rate, CALM_RATE) : rate, now);
+    sky.raf = requestAnimationFrame(tick);
+    sky.pace = retried(sky.pace, now);
+    const isCalm = !sky.air.lively;
+    const rate = isCalm ? Math.min(sky.pace.rate, CALM_RATE) : sky.pace.rate;
+    const due = beat(sky.clock.drawnAt, rate, now);
     if (Number.isNaN(due)) {
       return;
     }
-    drawnAt = due;
     const begin = performance.now();
-    const dt = Math.min(MAX_DT, (now - last) / 1000);
-    last = now;
-    time += dt;
-    owed += dt;
-    let steps = 0;
-    while (owed >= STEP && steps < MAX_STEPS) {
-      stepAir(air, STEP);
-      owed -= STEP;
-      steps++;
+    const { clock, dt, steps } = advance(sky.clock, now, due);
+    sky.clock = clock;
+    range(steps).forEach(() => {
+      stepAir(sky.air, STEP);
+    });
+    const sparkles = sky.theme === "dark" ? sky.view?.frame.sparkles : null;
+    if (sky.view && sparkles) {
+      stepSparkles(sparkles, dt, sky.view.grid.faintRow, isStar);
     }
-    if (steps === MAX_STEPS) {
-      owed = 0;
-    }
-    const sparkles = theme === "dark" ? view?.frame.sparkles : null;
-    if (view && sparkles) {
-      stepSparkles(sparkles, dt, view.grid.faintRow, isStar);
-    }
-    draw(drawn++ & 1, isCalm ? 1 : TURNS);
-    if (isCalm) {
-      return;
-    }
-    costs[costed++] = performance.now() - begin;
-    if (costed < PACE_FRAMES) {
-      return;
-    }
-    costed = 0;
-    sorted.set(costs);
-    sorted.sort();
-    const ms = sorted[PACE_FRAMES >> 1];
-    if (ms > SLOW_MS) {
-      pace(HALF_RATE, now);
-    } else if (ms < QUICK_MS) {
-      pace(FULL_RATE, now);
+    const half = sky.drawn & 1;
+    sky.drawn += 1;
+    draw(half, isCalm ? 1 : TURNS);
+    if (!isCalm) {
+      sky.pace = timed(sky.pace, performance.now() - begin, now);
     }
   };
 
   const schedule = () => {
-    cancelAnimationFrame(raf);
-    if (stopped) {
+    cancelAnimationFrame(sky.raf);
+    if (signal.aborted) {
       return;
     }
     if (reduced.matches) {
-      time = 0;
+      sky.clock = { ...sky.clock, time: 0 };
       draw(EVERY_ROW);
       return;
     }
-    if (!visible || document.hidden) {
+    if (!sky.visible || document.hidden) {
       return;
     }
-    last = performance.now();
-    drawnAt = Number.NEGATIVE_INFINITY;
-    raf = requestAnimationFrame(tick);
+    sky.clock = { ...sky.clock, last: performance.now(), drawnAt: Number.NEGATIVE_INFINITY };
+    sky.raf = requestAnimationFrame(tick);
   };
 
   const pointerAt = (e: PointerEvent) => {
@@ -400,11 +428,11 @@ export function startSky(
     if (reduced.matches || e.pointerType === "touch") {
       return;
     }
-    const at = visible ? pointerAt(e) : null;
+    const at = sky.visible ? pointerAt(e) : null;
     if (at) {
-      blow(air, at.x, at.y, e.timeStamp);
+      blow(sky.air, at.x, at.y, e.timeStamp);
     } else {
-      calm(air);
+      calm(sky.air);
     }
   };
   const onPointerDown = (e: PointerEvent) => {
@@ -413,27 +441,26 @@ export function startSky(
     }
     const at = pointerAt(e);
     if (at) {
-      puff(air, at.x, at.y);
+      puff(sky.air, at.x, at.y);
     }
   };
-  const onLeave = () => calm(air);
+  const onLeave = () => calm(sky.air);
   const onTheme = () => {
-    const next = themeOf();
-    if (stopped || next === theme) {
+    const next = themeOf(sky.choice);
+    if (signal.aborted || next === sky.theme) {
       return;
     }
-    theme = next;
+    sky.theme = next;
     draw(EVERY_ROW);
   };
 
   const sized = new ResizeObserver(resize);
   const seen = new IntersectionObserver(([entry]) => {
-    visible = entry?.isIntersecting ?? true;
+    sky.visible = entry?.isIntersecting ?? true;
     schedule();
   });
   sized.observe(canvas);
   seen.observe(canvas);
-  const { signal } = listening;
   darkScheme.addEventListener("change", onTheme, { signal });
   reduced.addEventListener("change", schedule, { signal });
   document.addEventListener("visibilitychange", schedule, { signal });
@@ -446,16 +473,15 @@ export function startSky(
   schedule();
 
   return {
-    setTheme(next) {
-      choice = next;
+    setTheme: (next) => {
+      sky.choice = next;
       onTheme();
     },
-    stop() {
-      stopped = true;
-      cancelAnimationFrame(raf);
+    stop: () => {
+      listening.abort();
+      cancelAnimationFrame(sky.raf);
       sized.disconnect();
       seen.disconnect();
-      listening.abort();
     },
   };
-}
+};

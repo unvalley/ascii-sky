@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { range } from "./cells.ts";
 import { beat, FULL_RATE, fitGlyphs, HALF_RATE } from "./engine.ts";
 
 const INK = { up: 76, down: 22, left: 2, right: 58 };
@@ -7,10 +8,12 @@ const GAP = 1;
 const PAD = 0.25;
 
 describe("fitGlyphs", () => {
-  for (const [cw, ch] of [
-    [6, 9.75],
-    [8, 12],
-  ] as const) {
+  (
+    [
+      [6, 9.75],
+      [8, 12],
+    ] as const
+  ).forEach(([cw, ch]) => {
     const fit = fitGlyphs(INK, cw, ch);
     const k = fit.size / 100;
     const top = fit.y - INK.up * k;
@@ -37,22 +40,17 @@ describe("fitGlyphs", () => {
       );
       assert.ok(Math.abs(fills - 1) < 1e-9);
     });
-  }
+  });
 });
 
-function drawnIn(hz: number, rate: number, seconds = 1) {
-  let drawnAt = Number.NEGATIVE_INFINITY;
-  let drawn = 0;
-  for (let i = 1; i <= hz * seconds; i++) {
-    const due = beat(drawnAt, rate, (i * 1000) / hz);
-    if (Number.isNaN(due)) {
-      continue;
-    }
-    drawnAt = due;
-    drawn++;
-  }
-  return drawn;
-}
+const drawnIn = (hz: number, rate: number, seconds = 1) =>
+  range(hz * seconds).reduce(
+    (clock, i) => {
+      const due = beat(clock.drawnAt, rate, ((i + 1) * 1000) / hz);
+      return Number.isNaN(due) ? clock : { drawnAt: due, drawn: clock.drawn + 1 };
+    },
+    { drawnAt: Number.NEGATIVE_INFINITY, drawn: 0 },
+  ).drawn;
 
 describe("beat", () => {
   test("draws the first frame whenever it comes", () => {

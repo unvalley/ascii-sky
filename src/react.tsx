@@ -10,7 +10,7 @@ export type AsciiSkyProps = MountOptions & {
 const FADE = "opacity 700ms";
 const fill: CSSProperties = { position: "absolute", inset: 0, width: "100%", height: "100%" };
 
-export function AsciiSky({
+export const AsciiSky = ({
   theme = "auto",
   assets,
   faintFrom,
@@ -18,7 +18,7 @@ export function AsciiSky({
   night,
   className,
   style,
-}: AsciiSkyProps) {
+}: AsciiSkyProps) => {
   const canvas = useRef<HTMLCanvasElement>(null);
   const sky = useRef<MountedSky | null>(null);
   const [drawn, setDrawn] = useState(false);
@@ -80,4 +80,4 @@ export function AsciiSky({
       />
     </div>
   );
-}
+};
