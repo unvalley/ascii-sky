@@ -3,8 +3,8 @@ import {
   type SkyCells,
   type SkyTheme,
   skyCells,
-  viceColours,
-  viceGradient,
+  sunsetColours,
+  sunsetGradient,
 } from "./cells.ts";
 import { measureShapes, type Sky, type SkyOptions, startSky, type ThemeChoice } from "./engine.ts";
 import { NIGHT } from "./shade.ts";
@@ -90,7 +90,7 @@ const loadSky = async (assets: SkyAssets, signal: AbortSignal): Promise<SkyCells
       rgb: {
         light: light.pixels,
         dark: dark.pixels,
-        vice: viceColours(sky.columns, sky.rows, sky.cellHeight, text),
+        sunset: sunsetColours(sky.columns, sky.rows, sky.cellHeight, text),
       },
     },
     near,
@@ -99,7 +99,7 @@ const loadSky = async (assets: SkyAssets, signal: AbortSignal): Promise<SkyCells
   });
 };
 
-const STILL_OPACITY: Record<SkyTheme, number> = { light: 0.4, dark: 0.33, vice: 0.4 };
+const STILL_OPACITY: Record<SkyTheme, number> = { light: 0.4, dark: 0.33, sunset: 0.4 };
 
 export type StillSkyStyle = {
   background: string;
@@ -109,8 +109,8 @@ export type StillSkyStyle = {
 
 export const stillSky = (theme: SkyTheme, assets: SkyAssets = DEFAULT_ASSETS): StillSkyStyle => ({
   background:
-    theme === "vice"
-      ? viceGradient()
+    theme === "sunset"
+      ? sunsetGradient()
       : `url("${skyUrl(assets, theme)}") center top / ${SKY_WIDTH}px ${SKY_HEIGHT}px repeat-x`,
   imageRendering: "pixelated",
   opacity: STILL_OPACITY[theme],

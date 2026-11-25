@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { blow, createAir, puff, stepAir } from "../src/air.ts";
-import { GLYPHS, range, skyCells, viceColours } from "../src/cells.ts";
+import { GLYPHS, range, skyCells, sunsetColours } from "../src/cells.ts";
 import { STEP } from "../src/engine.ts";
 import { sky } from "../src/index.ts";
 import { createFrame, layoutGrid, shadeFrame, TURNS } from "../src/shade.ts";
@@ -28,7 +28,7 @@ const cells = skyCells({
     rgb: {
       light: light.pixels,
       dark: dark.pixels,
-      vice: viceColours(sky.columns, sky.rows, sky.cellHeight, text),
+      sunset: sunsetColours(sky.columns, sky.rows, sky.cellHeight, text),
     },
   },
   near,

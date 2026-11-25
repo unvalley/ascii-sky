@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { mountSky, SKY_HEIGHT, type SkyTheme, stillSky, type ThemeChoice } from "../src/index.ts";
 
-const CHOICES: readonly string[] = ["auto", "light", "dark", "vice"];
+const CHOICES: readonly string[] = ["auto", "light", "dark", "sunset"];
 const STORE_KEY = "ascii-sky-theme";
 
 const root = document.documentElement;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { viceGradient } from "./cells.ts";
+import { sunsetGradient } from "./cells.ts";
 import { SKY_HEIGHT, SKY_WIDTH, sky, stillSky } from "./index.ts";
 
 describe("stillSky", () => {
@@ -24,7 +24,7 @@ describe("stillSky", () => {
     assert.ok(stillSky("dark", own).background.startsWith('url("/hashed/dark.bin")'));
   });
 
-  test("the GTA VI sky is its gradient", () => {
-    assert.equal(stillSky("vice").background, viceGradient());
+  test("the sunset sky is its gradient", () => {
+    assert.equal(stillSky("sunset").background, sunsetGradient());
   });
 });

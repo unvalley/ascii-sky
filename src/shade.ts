@@ -82,11 +82,11 @@ export const layoutGrid = (
   };
 };
 
-const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], vice: [0, 190, 230] } as const;
+const GLOW = { light: [16, 82, 214], dark: [214, 240, 255], sunset: [0, 190, 230] } as const;
 const WIND_TINT = {
   light: { glyph: 1, tile: 0 },
   dark: { glyph: 1, tile: 0 },
-  vice: { glyph: 2.2, tile: 0.4 },
+  sunset: { glyph: 2.2, tile: 0.4 },
 } as const;
 const STREAK = { glow: 0.28, speed: 50 };
 const GUSTY = 0.7;

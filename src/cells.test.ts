@@ -13,12 +13,12 @@ import {
   range,
   reachOf,
   SKY_RAMP,
+  SUNSET_STOPS,
   skyCells,
   span,
+  sunsetColours,
+  sunsetGradient,
   THEMES,
-  VICE_STOPS,
-  viceColours,
-  viceGradient,
   WIND,
   wrap,
 } from "./cells.ts";
@@ -45,7 +45,7 @@ const sky = (near: CloudLayer, far = layer(0)) => {
       cw: 6,
       ch: 10,
       text: Array.from({ length: rows }, () => SKY_RAMP[4].repeat(columns)).join("\n"),
-      rgb: { light: rgb, dark: rgb, vice: rgb },
+      rgb: { light: rgb, dark: rgb, sunset: rgb },
     },
     near,
     far,
@@ -78,13 +78,13 @@ describe("night", () => {
   });
 });
 
-describe("vice", () => {
-  test("a Vice City sunset has only the near layer's clouds", () => {
+describe("sunset", () => {
+  test("a sunset has only the near layer's clouds", () => {
     const out = [0, 0, 0, 0, 0, 0, 0, 0];
     const farOnly = sky(layer(0), layer(255, 0));
-    assert.equal(farOnly.at(0, "vice")(40, 40, 8, 12, out), OPEN_SKY);
+    assert.equal(farOnly.at(0, "sunset")(40, 40, 8, 12, out), OPEN_SKY);
     assert.notEqual(farOnly.at(0, "light")(40, 40, 8, 12, out), OPEN_SKY);
-    assert.notEqual(sky(layer(255, 0)).at(0, "vice")(40, 40, 8, 12, out), OPEN_SKY);
+    assert.notEqual(sky(layer(255, 0)).at(0, "sunset")(40, 40, 8, 12, out), OPEN_SKY);
   });
 });
 
@@ -269,7 +269,7 @@ const text = Array.from(
   { length: ROWS },
   () => `${SKY_RAMP[0]}${SKY_RAMP[4]}${SKY_RAMP.at(-1)}`,
 ).join("\n");
-const colours = viceColours(COLUMNS, ROWS, CH, text);
+const colours = sunsetColours(COLUMNS, ROWS, CH, text);
 const at = (c: number, r: number) => {
   const o = (r * COLUMNS + c) * 4;
   return [colours[o], colours[o + 1], colours[o + 2], colours[o + 3]];
@@ -279,7 +279,7 @@ const hue = ([r, g, b]: number[]) => {
   return ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360;
 };
 
-describe("viceColours", () => {
+describe("sunsetColours", () => {
   test("a colour a cell, opaque", () => {
     assert.equal(colours.length, COLUMNS * ROWS * 4);
     assert.ok(range(ROWS).every((r) => at(1, r)[3] === 255));
@@ -304,9 +304,9 @@ describe("viceColours", () => {
   });
 
   test("the page's gradient has the same stops", () => {
-    const css = viceGradient();
+    const css = sunsetGradient();
     assert.ok(
-      VICE_STOPS.every(([y, c]) => css.includes(`${c} ${y}px`)),
+      SUNSET_STOPS.every(([y, c]) => css.includes(`${c} ${y}px`)),
       css,
     );
   });

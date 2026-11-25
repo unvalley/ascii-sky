@@ -132,7 +132,7 @@ export type CloudLayer = {
   height: number;
 };
 
-export type SkyTheme = "light" | "dark" | "vice";
+export type SkyTheme = "light" | "dark" | "sunset";
 
 type Look = {
   inside: readonly number[];
@@ -168,7 +168,7 @@ export const THEMES: Record<SkyTheme, Look> = {
     clouds: false,
     far: false,
   },
-  vice: {
+  sunset: {
     inside: codes(" .:;o8%@"),
     tile: palette("#ffeedd", "#ffd8c8", "#f9bfd2", "#e3a6d6"),
     glyph: palette("#ff9a68", "#f87a96", "#d064b0", "#985cc4"),
@@ -180,7 +180,7 @@ export const THEMES: Record<SkyTheme, Look> = {
   },
 };
 
-export const VICE_STOPS: readonly (readonly [number, string])[] = [
+export const SUNSET_STOPS: readonly (readonly [number, string])[] = [
   [0, "#5a4cc2"],
   [100, "#9551c6"],
   [180, "#df4f9d"],
@@ -188,26 +188,26 @@ export const VICE_STOPS: readonly (readonly [number, string])[] = [
   [340, "#ff9148"],
   [440, "#ffbb4a"],
 ];
-const VICE_LAB = VICE_STOPS.map(([y, c]) => [y, oklab(...hex(c))] as const);
-const VICE_DEPTH = 0.1;
+const SUNSET_LAB = SUNSET_STOPS.map(([y, c]) => [y, oklab(...hex(c))] as const);
+const SUNSET_DEPTH = 0.1;
 
 const sunsetAt = (y: number): readonly [number, number, number] => {
-  const [first] = VICE_LAB;
-  const last = VICE_LAB.at(-1) ?? first;
+  const [first] = SUNSET_LAB;
+  const last = SUNSET_LAB.at(-1) ?? first;
   if (y <= first[0]) {
     return first[1];
   }
   if (y >= last[0]) {
     return last[1];
   }
-  const next = VICE_LAB.findIndex(([at]) => at >= y);
-  const [y0, a] = VICE_LAB[next - 1];
-  const [y1, b] = VICE_LAB[next];
+  const next = SUNSET_LAB.findIndex(([at]) => at >= y);
+  const [y0, a] = SUNSET_LAB[next - 1];
+  const [y1, b] = SUNSET_LAB[next];
   const t = (y - y0) / (y1 - y0);
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 };
 
-export const viceColours = (
+export const sunsetColours = (
   columns: number,
   rows: number,
   ch: number,
@@ -217,7 +217,7 @@ export const viceColours = (
   const shades = range(rows).map((r) => {
     const [L, a, b] = sunsetAt((r + 0.5) * ch);
     return [...SKY_RAMP].map((_, g) =>
-      fromOklab(L + VICE_DEPTH * (0.5 - g / (SKY_RAMP.length - 1)), a, b),
+      fromOklab(L + SUNSET_DEPTH * (0.5 - g / (SKY_RAMP.length - 1)), a, b),
     );
   });
   return Uint8ClampedArray.from({ length: columns * rows * 4 }, (_, i) => {
@@ -230,8 +230,8 @@ export const viceColours = (
   });
 };
 
-export const viceGradient = (): string =>
-  `linear-gradient(to bottom, ${VICE_STOPS.map(([y, c]) => `${c} ${y}px`).join(", ")})`;
+export const sunsetGradient = (): string =>
+  `linear-gradient(to bottom, ${SUNSET_STOPS.map(([y, c]) => `${c} ${y}px`).join(", ")})`;
 
 export const bigClouds = (layer: CloudLayer, smallest: number): CloudLayer => {
   const { pixels, width: w, height: h } = layer;
@@ -659,7 +659,7 @@ export const skyCells = ({
   const cloudsOf: Record<SkyTheme, () => Clouds> = {
     light: once(() => findClouds(THEMES.light.smallest)),
     dark: once(() => findClouds(THEMES.dark.smallest)),
-    vice: once(() => findClouds(THEMES.vice.smallest)),
+    sunset: once(() => findClouds(THEMES.sunset.smallest)),
   };
 
   const cellAt: CellAt = (x0, y0, cw, ch, out, shown = -1, pushX = 0, pushY = 0) => {

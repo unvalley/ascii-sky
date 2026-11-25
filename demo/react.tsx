@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { SkyTheme } from "../src/index.ts";
 import { AsciiSky } from "../src/react.tsx";
 
-const THEMES = ["light", "dark", "vice"] as const;
+const THEMES = ["light", "dark", "sunset"] as const;
 
 export const App = () => {
   const [theme, setTheme] = useState<SkyTheme>("light");
