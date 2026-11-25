@@ -23,7 +23,6 @@ export const AsciiSky = ({
   const sky = useRef<MountedSky | null>(null);
   const [drawn, setDrawn] = useState(false);
   const themeNow = useRef(theme);
-  themeNow.current = theme;
 
   useEffect(() => {
     const element = canvas.current;
@@ -53,6 +52,7 @@ export const AsciiSky = ({
   }, [assets, faintFrom, ignore, night]);
 
   useEffect(() => {
+    themeNow.current = theme;
     sky.current?.setTheme(theme);
   }, [theme]);
 
