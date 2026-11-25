@@ -6,8 +6,8 @@ import {
   sunsetColours,
   sunsetGradient,
 } from "./cells.ts";
-import { measureShapes, type Sky, type SkyOptions, startSky, type ThemeChoice } from "./engine.ts";
-import { NIGHT } from "./shade.ts";
+import { CONTROLS, measureShapes, type Sky, startSky, type ThemeChoice } from "./engine.ts";
+import { NIGHT, type Stars } from "./shade.ts";
 
 export type { SkyTheme } from "./cells.ts";
 export { CONTROLS, type ThemeChoice } from "./engine.ts";
@@ -45,7 +45,7 @@ const skyUrl = (assets: SkyAssets, file: keyof typeof SKY_FILES): string => {
   return `${base}${SKY_FILES[file]}?v=${sky.version}`;
 };
 
-const fetched = async (url: string, signal?: AbortSignal): Promise<Response> => {
+const fetched = async (url: string, signal: AbortSignal): Promise<Response> => {
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(`ascii-sky: ${url} answered ${response.status}`);
@@ -53,7 +53,7 @@ const fetched = async (url: string, signal?: AbortSignal): Promise<Response> => 
   return response;
 };
 
-const pixelsOf = async (url: string, signal?: AbortSignal): Promise<CloudLayer> => {
+const pixelsOf = async (url: string, signal: AbortSignal): Promise<CloudLayer> => {
   const response = await fetched(url, signal);
   const bitmap = await createImageBitmap(await response.blob(), {
     colorSpaceConversion: "none",
@@ -116,8 +116,12 @@ export const stillSky = (theme: SkyTheme, assets: SkyAssets = DEFAULT_ASSETS): S
   opacity: STILL_OPACITY[theme],
 });
 
-export type MountOptions = SkyOptions & {
+export type MountOptions = {
+  theme?: ThemeChoice;
   assets?: SkyAssets;
+  faintFrom?: number;
+  ignore?: string;
+  night?: Stars;
 };
 
 export type MountedSky = Sky & {
@@ -126,7 +130,13 @@ export type MountedSky = Sky & {
 
 export const mountSky = (
   canvas: HTMLCanvasElement,
-  { assets = DEFAULT_ASSETS, night = NIGHT, theme = "auto", ...options }: MountOptions = {},
+  {
+    theme = "auto",
+    assets = DEFAULT_ASSETS,
+    faintFrom,
+    ignore = CONTROLS,
+    night = NIGHT,
+  }: MountOptions = {},
 ): MountedSky => {
   const loading = new AbortController();
   const mounted: { theme: ThemeChoice; running: Sky | null } = { theme, running: null };
@@ -134,9 +144,10 @@ export const mountSky = (
     (cells) => {
       if (!loading.signal.aborted) {
         mounted.running = startSky(canvas, cells, SKY_WIDTH, CELL, {
-          ...options,
-          night,
           theme: mounted.theme,
+          faintFrom: faintFrom ?? null,
+          ignore,
+          night,
         });
       }
     },

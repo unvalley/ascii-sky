@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  BLANK,
   bigClouds,
   type CloudLayer,
   createLook,
@@ -61,7 +62,7 @@ const CELL_HEIGHT = 12;
 const shadeAt = (cells: SkyCells, seconds: number, theme: SkyTheme, x: number, y: number) => {
   const look = createLook();
   const index = cells.indexAt(x + CELL_WIDTH / 2, y + CELL_HEIGHT / 2);
-  const code = cells.at(seconds, theme)(x, y, CELL_WIDTH, CELL_HEIGHT, look, index);
+  const code = cells.at(seconds, theme)(x, y, CELL_WIDTH, CELL_HEIGHT, look, index, BLANK, 0, 0);
   return { code, look };
 };
 
@@ -141,9 +142,9 @@ describe("bigClouds", () => {
 
 describe("drift", () => {
   test("starts still and only ever moves on: the wind never stops", () => {
-    assert.equal(drift(0, WIND.near), 0);
+    assert.equal(drift(0, WIND.near, 0), 0);
     const times = range(1200).map((i) => i / 10);
-    const drifts = times.map((t) => drift(t, WIND.near));
+    const drifts = times.map((t) => drift(t, WIND.near, 0));
     drifts.slice(1).forEach((d, i) => {
       assert.ok(d > drifts[i], `at ${times[i + 1].toFixed(1)} s`);
     });
@@ -151,7 +152,7 @@ describe("drift", () => {
 
   test("goes at the mean speed over a long while", () => {
     const seconds = 23 * 8.7 * 10;
-    assert.ok(Math.abs(drift(seconds, WIND.far) / seconds - WIND.far) < 0.1);
+    assert.ok(Math.abs(drift(seconds, WIND.far, 0) / seconds - WIND.far) < 0.1);
   });
 });
 

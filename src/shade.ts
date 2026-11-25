@@ -65,7 +65,7 @@ export const layoutGrid = (
   dpr: number,
   skyWidth: number,
   cell: CellSize,
-  faintFrom = 0,
+  faintFrom: number,
 ): Grid => {
   const half = Math.floor(width / 2 / cell.width);
   const originX = width / 2 - half * cell.width;
@@ -133,7 +133,7 @@ export type Stars = Readonly<{
   stars: number;
   star: readonly number[];
   glow: readonly number[];
-  sparkle?: boolean;
+  sparkle: boolean;
 }>;
 
 export const NIGHT: Stars = {
@@ -142,7 +142,12 @@ export const NIGHT: Stars = {
   glow: hex("#b0c8ff"),
   sparkle: true,
 };
-const NO_STARS: Stars = { stars: 0, star: hex("#ffffff"), glow: GLOW.dark };
+export const NO_STARS: Stars = {
+  stars: 0,
+  star: hex("#ffffff"),
+  glow: GLOW.dark,
+  sparkle: false,
+};
 
 export const starAt = (column: number, row: number, share: number): boolean =>
   hash(column, row, STAR_SEED.place) < share;
@@ -181,14 +186,14 @@ const BIG: readonly Step[] = [
 ];
 
 type Sparkle = Readonly<{
-  steps: readonly Step[] | null;
+  steps: readonly Step[];
   age: number;
   column: number;
   row: number;
   tint: number;
 }>;
 
-const GONE: Sparkle = { steps: null, age: 0, column: 0, row: 0, tint: 0 };
+const GONE: Sparkle = { steps: [], age: 0, column: 0, row: 0, tint: 0 };
 
 export type Sparkles = {
   readonly columns: number;
@@ -213,8 +218,10 @@ export const createSparkles = (columns: number, rows: number): Sparkles => ({
 });
 
 const lay = (sp: Sparkles, s: Sparkle, on: boolean) => {
-  const step = s.steps?.[s.age] ?? [];
-  step.forEach(([dc, dr, glyph]) => {
+  if (s.age >= s.steps.length) {
+    return;
+  }
+  s.steps[s.age].forEach(([dc, dr, glyph]) => {
     const c = s.column + dc;
     const r = s.row + dr;
     if (c < 0 || r < 0 || c >= sp.columns || r >= sp.rows) {
@@ -268,7 +275,7 @@ const spawn = (
   isStar: (column: number, row: number) => boolean,
   random: () => number,
 ): readonly Sparkle[] => {
-  const slot = pool.findIndex((s) => !s.steps);
+  const slot = pool.findIndex((s) => s.steps.length === 0);
   const spot = slot < 0 ? null : findSpot(sp, steps, rows, isStar, random, SPAWN_TRIES);
   if (!spot) {
     return pool;
@@ -279,7 +286,7 @@ const spawn = (
 };
 
 const older = (sp: Sparkles, s: Sparkle): Sparkle => {
-  if (!s.steps) {
+  if (s.steps.length === 0) {
     return s;
   }
   lay(sp, s, false);
@@ -312,7 +319,7 @@ export const stepSparkles = (
   dt: number,
   rows: number,
   isStar: (column: number, row: number) => boolean,
-  random: () => number = Math.random,
+  random: () => number,
 ): void => {
   const settle = (debt: number, live: readonly Sparkle[]): readonly [number, readonly Sparkle[]] =>
     debt >= TICK ? settle(debt - TICK, tickSparkles(sp, live, rows, isStar, random)) : [debt, live];
@@ -346,7 +353,7 @@ export const createFrame = (
   grid: Grid,
   colours: Uint8ClampedArray,
   tiles: Uint8ClampedArray,
-  night: Stars = NO_STARS,
+  night: Stars,
 ): Frame => {
   const { columns, rows } = grid;
   return {
@@ -508,9 +515,9 @@ export const shadeFrame = (
   frame: Frame,
   t: number,
   theme: SkyTheme,
-  half: number = EVERY_ROW,
-  every = 1,
-  turn = 0,
+  half: number,
+  every: number,
+  turn: number,
 ): number => {
   const { columns, rows, faintRow } = grid;
   const dark = theme === "dark";

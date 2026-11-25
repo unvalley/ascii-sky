@@ -4,7 +4,7 @@ import { blow, createAir, puff, stepAir } from "../src/air.ts";
 import { GLYPHS, REGION_COUNT, RGBA, range, skyCells, sunsetColours } from "../src/cells.ts";
 import { STEP } from "../src/engine.ts";
 import { sky } from "../src/index.ts";
-import { createFrame, layoutGrid, shadeFrame, TURNS } from "../src/shade.ts";
+import { createFrame, layoutGrid, NO_STARS, shadeFrame, TURNS } from "../src/shade.ts";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const EVEN_SHAPE = 0.5;
@@ -60,7 +60,7 @@ const bench = ({ width, dpr }) => {
     hero + DESKTOP.faintBelowHero,
   );
   const n = grid.columns * grid.rows * RGBA;
-  const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n));
+  const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n), NO_STARS);
   const air = createAir(grid.columns, grid.rows, grid.cellWidth, grid.cellHeight);
   const run = (frames, stir) => {
     const times = range(frames).map((i) => {

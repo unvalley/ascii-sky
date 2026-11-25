@@ -9,6 +9,7 @@ import {
   EVERY_ROW,
   layoutGrid,
   MOST,
+  NO_STARS,
   type Stars,
   shadeFrame,
   sine,
@@ -45,7 +46,7 @@ const fakeCells = (density: number, cloudFrom = Number.POSITIVE_INFINITY) => {
   return { cells, seen };
 };
 
-const setup = (width = 400, height = 240, faint = 0, night?: Stars) => {
+const setup = (width = 400, height = 240, faint = 0, night: Stars = NO_STARS) => {
   const grid = layoutGrid(width, height, 1, width, CELL, faint);
   const n = grid.columns * grid.rows * 4;
   const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n), night);
@@ -57,7 +58,7 @@ describe("shadeFrame", () => {
   test("draws every cell in the first frame", () => {
     const { grid, frame, air } = setup();
     assert.ok(frame.shown.every((v) => v === UNDRAWN));
-    const changed = shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light");
+    const changed = shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     assert.equal(changed, grid.columns * grid.rows);
     assert.deepEqual([...frame.changed.subarray(0, changed)], range(changed));
   });
@@ -65,8 +66,8 @@ describe("shadeFrame", () => {
   test("redraws nothing when nothing has moved", () => {
     const { grid, frame, air } = setup();
     const { cells } = fakeCells(0.5);
-    shadeFrame(grid, cells, air, frame, 0, "light");
-    assert.equal(shadeFrame(grid, cells, air, frame, 0.4, "light"), 0);
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
+    assert.equal(shadeFrame(grid, cells, air, frame, 0.4, "light", EVERY_ROW, 1, 0), 0);
   });
 
   test("draws open sky as a glyph as dense as the painting's blue, on its tile", () => {
@@ -78,7 +79,7 @@ describe("shadeFrame", () => {
       ] as const
     ).forEach(([density, glyph]) => {
       const { grid, frame, air } = setup();
-      shadeFrame(grid, fakeCells(density).cells, air, frame, 0, "light");
+      shadeFrame(grid, fakeCells(density).cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
       assert.equal(frame.shown[0], GLYPHS.indexOf(glyph), `density ${density}`);
       assert.ok(frame.tiles[3] > 0);
     });
@@ -88,7 +89,7 @@ describe("shadeFrame", () => {
     const { grid, frame, air } = setup();
     const { cells } = fakeCells(0.5);
     const alphas = range(40).map((i) => {
-      shadeFrame(grid, cells, air, frame, i / 2, "light");
+      shadeFrame(grid, cells, air, frame, i / 2, "light", EVERY_ROW, 1, 0);
       assert.equal(frame.shown[0], sky(0.5));
       return frame.colours[3];
     });
@@ -98,7 +99,7 @@ describe("shadeFrame", () => {
 
   test("draws clouds' glyphs as they are, in full", () => {
     const { grid, frame, air } = setup();
-    shadeFrame(grid, fakeCells(0.5, 200).cells, air, frame, 0, "light");
+    shadeFrame(grid, fakeCells(0.5, 200).cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     const k = grid.columns - 1;
     assert.equal(frame.shown[k], CLOUD);
     assert.equal(frame.colours[k * 4 + 3], 255);
@@ -111,10 +112,10 @@ describe("shadeFrame", () => {
     const { cells, seen } = fakeCells(0.5);
     air.dx.fill(5);
     air.dy.fill(-2);
-    shadeFrame(grid, cells, air, frame, 0, "light");
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     assert.deepEqual(seen.push, [0, 0]);
     air.stirred = true;
-    shadeFrame(grid, cells, air, frame, 0, "light");
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     assert.deepEqual(seen.push, [5, -2]);
   });
 
@@ -122,7 +123,7 @@ describe("shadeFrame", () => {
     const { grid, frame, air } = setup();
     air.stirred = true;
     air.glow[0] = 1;
-    shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "dark");
+    shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "dark", EVERY_ROW, 1, 0);
     assert.deepEqual([...frame.colours.subarray(0, 4)], [214, 240, 255, 255]);
     assert.equal(frame.shown[0], sky(0.5));
   });
@@ -132,7 +133,7 @@ describe("shadeFrame", () => {
     air.stirred = true;
     air.glow[0] = 0.5;
     air.vx[0] = 200;
-    shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light");
+    shadeFrame(grid, fakeCells(0.5).cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     assert.equal(frame.shown[0], GLYPHS.indexOf("-"));
   });
 });
@@ -141,10 +142,10 @@ describe("faint rows", () => {
   test("take turns, each every other frame", () => {
     const { grid, frame, air } = setup(400, 240, 150);
     const { cells, seen } = fakeCells(0.5);
-    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     const asked = (half: number) => {
       seen.cells = 0;
-      shadeFrame(grid, cells, air, frame, 0, "light", half);
+      shadeFrame(grid, cells, air, frame, 0, "light", half, 1, 0);
       return seen.cells;
     };
     const rows = range(grid.rows);
@@ -159,7 +160,7 @@ describe("faint rows", () => {
   test("are all worked out when asked for every row", () => {
     const { grid, frame, air } = setup(400, 240, 150);
     const { cells, seen } = fakeCells(0.5);
-    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     assert.equal(seen.cells, grid.columns * grid.rows);
   });
 });
@@ -168,7 +169,7 @@ describe("turns", () => {
   test("work out one row in `every` a frame, each row in its turn", () => {
     const { grid, frame, air } = setup(400, 240);
     const { cells, seen } = fakeCells(0.5);
-    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     const counts = range(3).map((turn) => {
       seen.cells = 0;
       shadeFrame(grid, cells, air, frame, 0, "light", 0, 3, turn);
@@ -185,7 +186,7 @@ describe("turns", () => {
   test("still work out the cells the air is moving, every frame", () => {
     const { grid, frame, air } = setup(400, 240);
     const { cells, seen } = fakeCells(0.5);
-    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW);
+    shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     air.stirred = true;
     const k = Number(grid.columns) + 5;
     air.glow[k] = 0.5;
@@ -205,7 +206,7 @@ describe("wind", () => {
       air.stirred = true;
       const k = Number(grid.columns) + 5;
       air.glow[k] = 0.4;
-      shadeFrame(grid, cells, air, frame, 0, theme, EVERY_ROW);
+      shadeFrame(grid, cells, air, frame, 0, theme, EVERY_ROW, 1, 0);
       return {
         glyph: [...frame.colours.subarray(k * 4, k * 4 + 3)],
         tile: [...frame.tiles.subarray(k * 4, k * 4 + 3)],
@@ -294,7 +295,7 @@ describe("layoutGrid", () => {
       [822, 3],
     ] as const
   ).forEach(([width, dpr]) => {
-    const g = layoutGrid(width, 700, dpr, SKY, CELL);
+    const g = layoutGrid(width, 700, dpr, SKY, CELL, 0);
 
     test(`${width} px: cells are the size asked for`, () => {
       assert.equal(g.cellWidth, CELL.width);
@@ -328,12 +329,12 @@ describe("layoutGrid", () => {
   });
 
   test("with no faint line, no row is faint", () => {
-    const g = layoutGrid(1440, 700, 2, SKY, CELL);
+    const g = layoutGrid(1440, 700, 2, SKY, CELL, 0);
     assert.equal(g.faintRow, g.rows);
   });
 
   test("the backing store is the canvas in device pixels", () => {
-    const g = layoutGrid(1440, 700, 2, SKY, CELL);
+    const g = layoutGrid(1440, 700, 2, SKY, CELL, 0);
     assert.equal(g.pixelWidth, 2880);
     assert.equal(g.pixelHeight, 1400);
   });
@@ -357,7 +358,7 @@ describe("sparkles", () => {
       stepSparkles(sp, TICK, 20, star, random);
     });
     sp.pool
-      .filter((s) => s.steps)
+      .filter((s) => s.steps.length > 0)
       .forEach((s) => {
         assert.ok(star(s.column, s.row));
         assert.ok(s.row >= 1 && s.row < 20);
@@ -370,7 +371,7 @@ describe("sparkles", () => {
     const random = seeded(5);
     range(200).forEach(() => {
       stepSparkles(sp, TICK, 40, () => true, random);
-      assert.ok(sp.pool.filter((s) => s.steps).length <= MOST.big + MOST.small);
+      assert.ok(sp.pool.filter((s) => s.steps.length > 0).length <= MOST.big + MOST.small);
     });
   });
 
@@ -385,7 +386,7 @@ describe("sparkles", () => {
       stepSparkles(sp, TICK, 30, () => false, random);
     });
     assert.equal(shown(sp.code), 0);
-    assert.ok(sp.pool.every((s) => !s.steps));
+    assert.ok(sp.pool.every((s) => s.steps.length === 0));
   });
 
   test("mark the cells, and their rows, whose glyph changed", () => {

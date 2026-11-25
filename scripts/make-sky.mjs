@@ -103,82 +103,101 @@ const CUT_OUTS = [
   {
     name: "big",
     box: { left: 819, top: 26, right: 1536, bottom: 610 },
-    fade: { right: 110, bottom: 40 },
+    fade: { left: 0, top: 0, right: 110, bottom: 40 },
   },
   {
     name: "crown",
     box: { left: 1090, top: 0, right: 1430, bottom: 300 },
-    fade: { left: 70, right: 60, bottom: 90 },
+    fade: { left: 70, top: 0, right: 60, bottom: 90 },
   },
   {
     name: "base",
     box: { left: 800, top: 380, right: 1290, bottom: 610 },
-    fade: { top: 80, right: 60, bottom: 30 },
+    fade: { left: 0, top: 80, right: 60, bottom: 30 },
   },
   {
     name: "heap",
     box: { left: 0, top: 490, right: 320, bottom: 790 },
-    fade: { left: 80, right: 70, bottom: 30 },
+    fade: { left: 80, top: 0, right: 70, bottom: 30 },
   },
   {
     name: "flat",
     box: { left: 280, top: 615, right: 600, bottom: 800 },
-    fade: { left: 60, bottom: 20 },
+    fade: { left: 60, top: 0, right: 0, bottom: 20 },
   },
   {
     name: "left",
     box: { left: 0, top: 493, right: 572, bottom: 815 },
-    fade: { left: 90, bottom: 30 },
+    fade: { left: 90, top: 0, right: 0, bottom: 30 },
   },
   {
     name: "row",
     box: { left: 990, top: 690, right: 1400, bottom: 875 },
-    fade: { right: 50, bottom: 30 },
+    fade: { left: 0, top: 0, right: 50, bottom: 30 },
   },
   {
     name: "rowEnd",
     box: { left: 1380, top: 690, right: 1536, bottom: 820 },
-    fade: { left: 50, right: 70, bottom: 20 },
+    fade: { left: 50, top: 0, right: 70, bottom: 20 },
   },
   {
     name: "topLeft",
     box: { left: 150, top: 0, right: 460, bottom: 205 },
-    fade: { left: 40, top: 70 },
+    fade: { left: 40, top: 70, right: 0, bottom: 0 },
   },
-  { name: "puffs", box: { left: 55, top: 855, right: 345, bottom: 965 }, fade: { bottom: 20 } },
-  { name: "lowMid", box: { left: 650, top: 840, right: 995, bottom: 958 }, fade: { bottom: 30 } },
-  { name: "wisp1", box: { left: 425, top: 220, right: 650, bottom: 330 }, fade: {} },
-  { name: "wisp2", box: { left: 0, top: 352, right: 240, bottom: 440 }, fade: { left: 50 } },
-  { name: "wisp3", box: { left: 1205, top: 540, right: 1360, bottom: 615 }, fade: {} },
+  {
+    name: "puffs",
+    box: { left: 55, top: 855, right: 345, bottom: 965 },
+    fade: { left: 0, top: 0, right: 0, bottom: 20 },
+  },
+  {
+    name: "lowMid",
+    box: { left: 650, top: 840, right: 995, bottom: 958 },
+    fade: { left: 0, top: 0, right: 0, bottom: 30 },
+  },
+  {
+    name: "wisp1",
+    box: { left: 425, top: 220, right: 650, bottom: 330 },
+    fade: { left: 0, top: 0, right: 0, bottom: 0 },
+  },
+  {
+    name: "wisp2",
+    box: { left: 0, top: 352, right: 240, bottom: 440 },
+    fade: { left: 50, top: 0, right: 0, bottom: 0 },
+  },
+  {
+    name: "wisp3",
+    box: { left: 1205, top: 540, right: 1360, bottom: 615 },
+    fade: { left: 0, top: 0, right: 0, bottom: 0 },
+  },
 ];
 
 const NEAR = [
-  { cutOut: "big", x: 330, base: 330, scale: 0.42 },
-  { cutOut: "wisp1", x: 760, base: 95, scale: 0.9, wide: 1.3 },
-  { cutOut: "flat", x: 820, base: 255, scale: 0.6 },
-  { cutOut: "row", x: 1180, base: 335, scale: 0.62, flip: true },
-  { cutOut: "crown", x: 1540, base: 215, scale: 0.55, wide: 1.3 },
-  { cutOut: "left", x: 1960, base: 320, scale: 0.5, wide: 1.15 },
-  { cutOut: "wisp2", x: 2290, base: 140, scale: 0.75, wide: 1.4 },
-  { cutOut: "heap", x: 160, base: 640, scale: 0.42, wide: 1.35 },
-  { cutOut: "lowMid", x: 1000, base: 560, scale: 0.7 },
-  { cutOut: "row", x: 1760, base: 660, scale: 0.5 },
+  { cutOut: "big", x: 330, base: 330, scale: 0.42, wide: 1, flip: false },
+  { cutOut: "wisp1", x: 760, base: 95, scale: 0.9, wide: 1.3, flip: false },
+  { cutOut: "flat", x: 820, base: 255, scale: 0.6, wide: 1, flip: false },
+  { cutOut: "row", x: 1180, base: 335, scale: 0.62, flip: true, wide: 1 },
+  { cutOut: "crown", x: 1540, base: 215, scale: 0.55, wide: 1.3, flip: false },
+  { cutOut: "left", x: 1960, base: 320, scale: 0.5, wide: 1.15, flip: false },
+  { cutOut: "wisp2", x: 2290, base: 140, scale: 0.75, wide: 1.4, flip: false },
+  { cutOut: "heap", x: 160, base: 640, scale: 0.42, wide: 1.35, flip: false },
+  { cutOut: "lowMid", x: 1000, base: 560, scale: 0.7, wide: 1, flip: false },
+  { cutOut: "row", x: 1760, base: 660, scale: 0.5, wide: 1, flip: false },
 ];
 const FAR = [
-  { cutOut: "topLeft", x: 110, base: 115, scale: 0.3 },
-  { cutOut: "puffs", x: 540, base: 175, scale: 0.42, wide: 1.2 },
-  { cutOut: "rowEnd", x: 900, base: 80, scale: 0.45 },
-  { cutOut: "base", x: 1270, base: 150, scale: 0.32, flip: true },
+  { cutOut: "topLeft", x: 110, base: 115, scale: 0.3, wide: 1, flip: false },
+  { cutOut: "puffs", x: 540, base: 175, scale: 0.42, wide: 1.2, flip: false },
+  { cutOut: "rowEnd", x: 900, base: 80, scale: 0.45, wide: 1, flip: false },
+  { cutOut: "base", x: 1270, base: 150, scale: 0.32, flip: true, wide: 1 },
   { cutOut: "lowMid", x: 1660, base: 60, scale: 0.36, flip: true, wide: 0.85 },
   { cutOut: "heap", x: 2010, base: 160, scale: 0.26, flip: true, wide: 1.35 },
-  { cutOut: "wisp3", x: 2310, base: 105, scale: 0.7, wide: 1.5 },
-  { cutOut: "flat", x: 620, base: 470, scale: 0.36, flip: true },
-  { cutOut: "puffs", x: 1500, base: 520, scale: 0.45, flip: true },
-  { cutOut: "rowEnd", x: 2200, base: 430, scale: 0.5, flip: true },
+  { cutOut: "wisp3", x: 2310, base: 105, scale: 0.7, wide: 1.5, flip: false },
+  { cutOut: "flat", x: 620, base: 470, scale: 0.36, flip: true, wide: 1 },
+  { cutOut: "puffs", x: 1500, base: 520, scale: 0.45, flip: true, wide: 1 },
+  { cutOut: "rowEnd", x: 2200, base: 430, scale: 0.5, flip: true, wide: 1 },
 ];
 
-const raw = (pixels, width, height, channels = RGB) =>
-  sharp(pixels, { raw: { width, height, channels } });
+const raw = (pixels, width, height) => sharp(pixels, { raw: { width, height, channels: RGB } });
 
 const band = async (painting) => {
   const { stretched, overlap } = BAND;
@@ -560,7 +579,7 @@ const cutClouds = async (painting) => {
   const cutOut = ({ name, box: { left: x0, top: y0, right: x1, bottom: y1 }, fade: fades }) => {
     const w = x1 - x0;
     const h = y1 - y0;
-    const fade = [fades.left ?? 0, fades.top ?? 0, fades.right ?? 0, fades.bottom ?? 0];
+    const fade = [fades.left, fades.top, fades.right, fades.bottom];
     const seed = x0 * SEED_STRIDE + y0;
     const reach = (side, t) => fade[side] * (FRINGE.least + FRINGE.spread * wave(t, seed + side));
     const edges = [
@@ -653,7 +672,7 @@ const writeSheet = async (cutOuts, file) => {
     .toFile(file);
 };
 
-const place = (layer, sp, { x, base, scale, wide = 1, flip = false }) => {
+const place = (layer, sp, { x, base, scale, wide, flip }) => {
   const w = Math.round(sp.w * scale * wide);
   const h = Math.round(sp.h * scale);
   const left = Math.round(x - w / 2);

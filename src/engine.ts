@@ -119,7 +119,7 @@ const measureInk = (ctx: CanvasRenderingContext2D): Ink => {
   );
 };
 
-const context2d = (canvas: HTMLCanvasElement, settings?: CanvasRenderingContext2DSettings) => {
+const context2d = (canvas: HTMLCanvasElement, settings: CanvasRenderingContext2DSettings) => {
   const ctx = canvas.getContext("2d", settings);
   if (!ctx) {
     throw new Error("ascii-sky: no 2d context");
@@ -177,15 +177,16 @@ export const measureShapes = (cellWidth: number, cellHeight: number): Float32Arr
   );
 };
 
-const layer = (canvas = document.createElement("canvas")) => ({ canvas, ctx: context2d(canvas) });
+const layer = (canvas: HTMLCanvasElement) => ({ canvas, ctx: context2d(canvas, {}) });
+const offscreen = () => layer(document.createElement("canvas"));
 
 const createLayers = (canvas: HTMLCanvasElement) => ({
   main: layer(canvas),
-  mask: layer(),
-  ink: layer(),
-  gaps: layer(),
-  tint: layer(),
-  tiles: layer(),
+  mask: offscreen(),
+  ink: offscreen(),
+  gaps: offscreen(),
+  tint: offscreen(),
+  tiles: offscreen(),
 });
 
 type Layers = ReturnType<typeof createLayers>;
@@ -259,12 +260,12 @@ const composite = (layers: Layers, grid: Grid, images: Images) => {
 
 export type ThemeChoice = SkyTheme | "auto";
 
-export type SkyOptions = {
-  theme?: ThemeChoice;
-  faintFrom?: number;
-  ignore?: string;
-  night?: Stars;
-};
+export type SkyConfig = Readonly<{
+  theme: ThemeChoice;
+  faintFrom: number | null;
+  ignore: string;
+  night: Stars;
+}>;
 
 export type Sky = {
   setTheme: (theme: ThemeChoice) => void;
@@ -290,7 +291,7 @@ export const startSky = (
   cells: SkyCells,
   skyWidth: number,
   cell: CellSize,
-  { theme: chosen = "auto", faintFrom, ignore = CONTROLS, night }: SkyOptions = {},
+  { theme: chosen, faintFrom, ignore, night }: SkyConfig,
 ): Sky => {
   const layers = createLayers(canvas);
   const reduced = globalThis.matchMedia("(prefers-reduced-motion: reduce)");
@@ -325,7 +326,7 @@ export const startSky = (
     return starAt(skyColumn, r, sky.view.frame.night.stars);
   };
 
-  const draw = (half: number, every = TURNS) => {
+  const draw = (half: number, every: number) => {
     const { view } = sky;
     if (!view) {
       return;
@@ -381,7 +382,7 @@ export const startSky = (
     };
     sky.air = fitAir(sky.air, grid.columns, grid.rows, grid.cellWidth, grid.cellHeight);
     sky.drawn = 0;
-    draw(EVERY_ROW);
+    draw(EVERY_ROW, TURNS);
   };
 
   const tick = (now: number) => {
@@ -401,7 +402,7 @@ export const startSky = (
     });
     const sparkles = sky.theme === "dark" ? sky.view?.frame.sparkles : null;
     if (sky.view && sparkles) {
-      stepSparkles(sparkles, dt, sky.view.grid.faintRow, isStar);
+      stepSparkles(sparkles, dt, sky.view.grid.faintRow, isStar, Math.random);
     }
     const half = sky.drawn & 1;
     sky.drawn += 1;
@@ -418,7 +419,7 @@ export const startSky = (
     }
     if (reduced.matches) {
       sky.clock = { ...sky.clock, time: 0 };
-      draw(EVERY_ROW);
+      draw(EVERY_ROW, TURNS);
       return;
     }
     if (!sky.visible || document.hidden) {
@@ -446,7 +447,9 @@ export const startSky = (
     }
   };
   const onPointerDown = (e: PointerEvent) => {
-    if (reduced.matches || (ignore && (e.target as Element | null)?.closest?.(ignore))) {
+    const onControl =
+      ignore !== "" && e.target instanceof Element && e.target.closest(ignore) !== null;
+    if (reduced.matches || onControl) {
       return;
     }
     const at = pointerAt(e);
@@ -461,12 +464,12 @@ export const startSky = (
       return;
     }
     sky.theme = next;
-    draw(EVERY_ROW);
+    draw(EVERY_ROW, TURNS);
   };
 
   const sized = new ResizeObserver(resize);
   const seen = new IntersectionObserver(([entry]) => {
-    sky.visible = entry?.isIntersecting ?? true;
+    sky.visible = entry.isIntersecting;
     schedule();
   });
   sized.observe(canvas);

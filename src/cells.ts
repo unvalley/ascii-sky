@@ -4,7 +4,7 @@ export const span = (from: number, to: number): number[] =>
   Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 export const once = <T>(make: () => T): (() => T) => {
-  const kept: { value?: T } = {};
+  const kept: { value: T | null } = { value: null };
   return () => {
     kept.value ??= make();
     return kept.value;
@@ -280,7 +280,8 @@ export const sunsetColours = (
   cellHeight: number,
   text: string,
 ): Uint8ClampedArray => {
-  const lines = text.split("\n");
+  const written = text.split("\n");
+  const lines = range(rows).map((r) => written[r] ?? "");
   const shades = range(rows).map((r) => {
     const [lightness, a, b] = sunsetAt((r + CENTRE) * cellHeight);
     return [...SKY_RAMP].map((_, g) =>
@@ -292,7 +293,7 @@ export const sunsetColours = (
     const k = (i - channel) / RGBA;
     const c = k % columns;
     const r = (k - c) / columns;
-    const glyph = lines[r]?.[c] ?? ".";
+    const glyph = lines[r][c] ?? ".";
     return channel === ALPHA ? BYTE_MAX : shades[r][Math.max(0, SKY_RAMP.indexOf(glyph))][channel];
   });
 };
@@ -349,7 +350,7 @@ const GUSTS = [
   { share: 0.45, period: 23, phase: 0 },
   { share: 0.25, period: 8.7, phase: 1.1 },
 ];
-export const drift = (seconds: number, mean: number, lag = 0): number =>
+export const drift = (seconds: number, mean: number, lag: number): number =>
   GUSTS.reduce((d, { share, period, phase }) => {
     const w = TAU / period;
     return d + (share / w) * (Math.sin(w * (seconds - lag) + phase) - Math.sin(phase));
@@ -545,9 +546,9 @@ export type CellAt = (
   height: number,
   look: Look,
   index: number,
-  shown?: number,
-  pushX?: number,
-  pushY?: number,
+  shown: number,
+  pushX: number,
+  pushY: number,
 ) => number;
 
 export type SkyCells = Readonly<{
@@ -931,7 +932,7 @@ const momentAt = (sky: Sky, seconds: number, theme: SkyTheme) => {
     style,
     map: sky.still.rgb[theme],
     clouds: style.clouds ? sky.cloudsOf[theme]() : null,
-    nearShift: drift(seconds, WIND.near),
+    nearShift: drift(seconds, WIND.near, 0),
     farShift: drift(seconds, WIND.far, FAR_LAG),
   });
 };
@@ -948,7 +949,8 @@ export const skyCells = ({
   shapes: Float32Array;
 }): SkyCells => {
   const { columns, rows } = still;
-  const lines = still.text.split("\n");
+  const written = still.text.split("\n");
+  const lines = range(rows).map((r) => written[r] ?? "");
   const cloudsFor = (style: ThemeStyle) => once(() => findClouds(near, far, style.smallestCloud));
   const sky: Sky = {
     still,
@@ -957,7 +959,7 @@ export const skyCells = ({
     far,
     density: Float32Array.from({ length: columns * rows }, (_, i) => {
       const c = i % columns;
-      const glyph = lines[(i - c) / columns]?.[c];
+      const glyph = lines[(i - c) / columns][c];
       return glyph === undefined ? 0 : Math.max(0, SKY_RAMP.indexOf(glyph)) / (SKY_RAMP.length - 1);
     }),
     cloudsOf: {
@@ -974,17 +976,8 @@ export const skyCells = ({
       farShift: 0,
     },
   };
-  const cellAt: CellAt = (
-    left,
-    top,
-    width,
-    height,
-    look,
-    index,
-    shown = BLANK,
-    pushX = 0,
-    pushY = 0,
-  ) => cellOf(sky, left, top, width, height, look, index, shown, pushX, pushY);
+  const cellAt: CellAt = (left, top, width, height, look, index, shown, pushX, pushY) =>
+    cellOf(sky, left, top, width, height, look, index, shown, pushX, pushY);
   return {
     at: (seconds, theme) => {
       momentAt(sky, seconds, theme);
