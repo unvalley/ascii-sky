@@ -87,7 +87,7 @@ export const fitAir = (
   return { ...createAir(columns, rows, cellWidth, cellHeight), pointer: air.pointer };
 };
 
-const stir = (air: Air, x: number, y: number, sx: number, sy: number, lift: number) => {
+const stir = (air: Air, x: number, y: number, sx: number, sy: number, lift: number): void => {
   const { columns, rows, cellWidth, cellHeight, vx, vy, glow } = air;
   const reach = Math.max(1, Math.round(REACH / cellWidth));
   const c0 = Math.floor(x / cellWidth);
@@ -95,8 +95,8 @@ const stir = (air: Air, x: number, y: number, sx: number, sy: number, lift: numb
   const down = Math.ceil((reach * cellWidth) / cellHeight);
   const lastRow = Math.min(rows - 1, r0 + down);
   const lastColumn = Math.min(columns - 1, c0 + reach);
-  for (let r = Math.max(0, r0 - down); r <= lastRow; r++) {
-    for (let c = Math.max(0, c0 - reach); c <= lastColumn; c++) {
+  for (let r = Math.max(0, r0 - down); r <= lastRow; r += 1) {
+    for (let c = Math.max(0, c0 - reach); c <= lastColumn; c += 1) {
       const d = Math.hypot(
         ((c + CENTRE) * cellWidth - x) / cellWidth,
         ((r + CENTRE) * cellHeight - y) / cellWidth,
@@ -166,19 +166,19 @@ export const laneAt = (lanes: Float64Array, angle: number): number => {
   return a + (b - a) * f * f * (HERMITE.square - HERMITE.cube * f);
 };
 
-const blowFront = (air: Air, gust: Gust) => {
+const blowFront = (air: Air, gust: Gust): void => {
   const { columns, rows, cellWidth, cellHeight, vx, vy, glow } = air;
   const { x: gx, y: gy, lanes } = gust;
   const fade = 1 - gust.age / GUST.life;
   const radius = GUST.reach * (1 - fade * fade);
-  const band = GUST.band;
+  const { band } = GUST;
   const speed = GUST.speed * fade;
   const lift = GUST.glow * fade;
   const out = radius + band;
   const lastRow = Math.min(rows - 1, Math.floor((gy + out) / cellHeight));
   const lastColumn = Math.min(columns - 1, Math.floor((gx + out) / cellWidth));
-  for (let r = Math.max(0, Math.floor((gy - out) / cellHeight)); r <= lastRow; r++) {
-    for (let c = Math.max(0, Math.floor((gx - out) / cellWidth)); c <= lastColumn; c++) {
+  for (let r = Math.max(0, Math.floor((gy - out) / cellHeight)); r <= lastRow; r += 1) {
+    for (let c = Math.max(0, Math.floor((gx - out) / cellWidth)); c <= lastColumn; c += 1) {
       const ox = (c + CENTRE) * cellWidth - gx;
       const oy = (r + CENTRE) * cellHeight - gy;
       const d = Math.sqrt(ox * ox + oy * oy);
@@ -209,12 +209,12 @@ const aged = (gust: Gust, dt: number): Gust => {
   return age >= GUST.life ? NO_GUST : { ...gust, age };
 };
 
-const spread = (air: Air, field: Float32Array, share: number, keep: number) => {
+const spread = (air: Air, field: Float32Array, share: number, keep: number): void => {
   const { columns, rows, spare } = air;
   const self = 1 - share;
   const side = share / NEIGHBOURS;
   const last = columns - 1;
-  for (let r = 0; r < rows; r++) {
+  for (let r = 0; r < rows; r += 1) {
     const row = r * columns;
     const end = row + last;
     const up = r > 0 ? -columns : 0;
@@ -222,7 +222,7 @@ const spread = (air: Air, field: Float32Array, share: number, keep: number) => {
     const first = field[row];
     spare[row] =
       (first * self + (first + field[row + 1] + field[row + up] + field[row + down]) * side) * keep;
-    for (let i = row + 1; i < end; i++) {
+    for (let i: number = row + 1; i < end; i += 1) {
       spare[i] =
         (field[i] * self + (field[i - 1] + field[i + 1] + field[i + up] + field[i + down]) * side) *
         keep;
@@ -244,13 +244,13 @@ export const stepAir = (air: Air, dt: number): void => {
       blowFront(air, g);
     });
   air.gusts = air.gusts.map((g) => aged(g, dt));
-  const blowing = air.gusts.some((g) => g.age >= 0);
+  const isBlowing = air.gusts.some((g) => g.age >= 0);
   const { vx, vy, dx, dy, glow } = air;
   const wind = Math.exp(-dt / WIND_LIFE);
   const shine = Math.exp(-dt / GLOW_LIFE);
   const spring = Math.exp(-dt / SPRING);
   let most = 0;
-  for (let i = 0; i < dx.length; i++) {
+  for (let i = 0; i < dx.length; i += 1) {
     const px = (dx[i] + vx[i] * dt) * spring;
     const py = (dy[i] + vy[i] * dt) * spring;
     const d = Math.sqrt(px * px + py * py);
@@ -271,16 +271,16 @@ export const stepAir = (air: Air, dt: number): void => {
     spread(air, dy, SPREAD.push, 1);
     spread(air, glow, SPREAD.glow, keepShine);
   });
-  if (most < STILL && !blowing) {
+  if (most < STILL && !isBlowing) {
     [vx, vy, dx, dy, glow].forEach((field) => {
       field.fill(0);
     });
     air.stirred = false;
   }
-  air.lively = blowing || (air.stirred && air.glow.some((_, k) => seenAt(air, k)));
+  air.lively = isBlowing || (air.stirred && air.glow.some((_, k) => isSeenAt(air, k)));
 };
 
-export const seenAt = (air: Air, k: number): boolean =>
+export const isSeenAt = (air: Air, k: number): boolean =>
   air.glow[k] > SEEN.glow ||
   air.dx[k] > SEEN.push ||
   air.dx[k] < -SEEN.push ||

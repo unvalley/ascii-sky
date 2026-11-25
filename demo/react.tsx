@@ -1,23 +1,36 @@
-import { type MouseEvent, StrictMode, useCallback, useState } from "react";
+import {
+  type MouseEvent,
+  type ReactElement,
+  StrictMode,
+  useCallback,
+  useLayoutEffect,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import type { SkyTheme } from "../src/index.ts";
 import { AsciiSky } from "../src/react.tsx";
 
 const THEMES = ["light", "sunset", "dark"] as const;
 
-export const App = () => {
+export const App = (): ReactElement => {
   const [theme, setTheme] = useState<SkyTheme>("light");
-  document.body.dataset.theme = theme;
+  useLayoutEffect(() => {
+    document.body.dataset.theme = theme;
+  }, [theme]);
   const pick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    setTheme(event.currentTarget.dataset.theme as SkyTheme);
+    const wanted = event.currentTarget.dataset.theme;
+    const picked = THEMES.find((t) => t === wanted);
+    if (picked !== undefined) {
+      setTheme(picked);
+    }
   }, []);
   return (
     <>
-      <AsciiSky theme={theme} assets={import.meta.env.BASE_URL} style={{ height: 360 }} />
+      <AsciiSky assets={import.meta.env.BASE_URL} style={{ height: 360 }} theme={theme} />
       <main>
         <h1>ascii-sky in React</h1>
         {THEMES.map((t) => (
-          <button key={t} type="button" data-theme={t} aria-pressed={t === theme} onClick={pick}>
+          <button aria-pressed={t === theme} data-theme={t} key={t} onClick={pick} type="button">
             {t}
           </button>
         ))}

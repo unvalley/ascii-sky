@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  type Air,
   blow,
   calm,
   createAir,
   fitAir,
+  isSeenAt,
   laneAt,
   lanesOf,
   MOST_PUSH,
   puff,
-  seenAt,
   stepAir,
 } from "./air.ts";
 import { range } from "./cells.ts";
@@ -17,15 +18,15 @@ import { STEP } from "./engine.ts";
 
 const CW = 8;
 const CH = 12;
-const at = (air: ReturnType<typeof createAir>, x: number, y: number) =>
+const at = (air: Air, x: number, y: number): number =>
   Math.floor(y / CH) * air.columns + Math.floor(x / CW);
-const still = (a: Float32Array) => a.every((v) => v === 0);
-const settle = (air: ReturnType<typeof createAir>, seconds: number) => {
+const isStill = (a: Float32Array): boolean => a.every((v) => v === 0);
+const settle = (air: Air, seconds: number): void => {
   range(Math.ceil(seconds / STEP)).forEach(() => {
     stepAir(air, STEP);
   });
 };
-const sweep = (air: ReturnType<typeof createAir>) => {
+const sweep = (air: Air): void => {
   range(11).forEach((i) => {
     blow(air, 40 + i * 20, 150, 1000 + i * 16);
   });
@@ -57,8 +58,8 @@ describe("lively air", () => {
         return;
       }
       stepAir(air, STEP);
-      const any = range(air.columns * air.rows).some((k) => seenAt(air, k));
-      assert.equal(air.lively, any, `step ${s}`);
+      const isAnySeen = range(air.columns * air.rows).some((k) => isSeenAt(air, k));
+      assert.equal(air.lively, isAnySeen, `step ${s}`);
     });
   });
 
@@ -76,14 +77,14 @@ describe("air", () => {
     const air = createAir(40, 30, CW, CH);
     stepAir(air, STEP);
     assert.equal(air.stirred, false);
-    assert.ok([air.vx, air.vy, air.dx, air.dy, air.glow].every(still));
+    assert.ok([air.vx, air.vy, air.dx, air.dy, air.glow].every(isStill));
   });
 
   test("the pointer's first move only says where it is", () => {
     const air = createAir(40, 30, CW, CH);
     blow(air, 100, 100, 1000);
     assert.equal(air.stirred, false);
-    assert.ok(still(air.vx));
+    assert.ok(isStill(air.vx));
   });
 
   test("moving the pointer pushes the air its way, near it only", () => {
@@ -119,9 +120,9 @@ describe("air", () => {
     const y = 30.5 * CH;
     puff(air, x, y);
     assert.equal(air.stirred, true);
-    const away = (k: number) =>
+    const away = (k: number): number =>
       Math.hypot(((k % air.columns) + 0.5) * CW - x, (Math.floor(k / air.columns) + 0.5) * CH - y);
-    const out = () =>
+    const out = (): number =>
       air.glow.reduce((sum, g, k) => sum + g * away(k), 0) /
       air.glow.reduce((sum, g) => sum + g, 0);
     settle(air, STEP * 6);
@@ -136,14 +137,14 @@ describe("air", () => {
     const y = 30.5 * CH;
     puff(air, x, y);
     settle(air, STEP * 12);
-    const sum = (field: Float32Array, where: (k: number) => boolean) =>
-      field.reduce((total, v, k) => (where(k) ? total + v : total), 0);
-    const west = (k: number) => ((k % air.columns) + 0.5) * CW < x;
-    const north = (k: number) => (Math.floor(k / air.columns) + 0.5) * CH < y;
-    const left = sum(air.vx, west);
-    const right = sum(air.vx, (k) => !west(k));
-    const up = sum(air.vy, north);
-    const down = sum(air.vy, (k) => !north(k));
+    const sum = (field: Float32Array, isCounted: (k: number) => boolean): number =>
+      field.reduce((total, v, k) => (isCounted(k) ? total + v : total), 0);
+    const isWest = (k: number): boolean => ((k % air.columns) + 0.5) * CW < x;
+    const isNorth = (k: number): boolean => (Math.floor(k / air.columns) + 0.5) * CH < y;
+    const left = sum(air.vx, isWest);
+    const right = sum(air.vx, (k) => !isWest(k));
+    const up = sum(air.vy, isNorth);
+    const down = sum(air.vy, (k) => !isNorth(k));
     assert.ok(left < 0 && right > 0, `${left} ${right}`);
     assert.ok(up < 0 && down > 0, `${up} ${down}`);
   });
@@ -177,7 +178,7 @@ describe("air", () => {
   });
 
   test("the same clicks blow the same way", () => {
-    const run = () => {
+    const run = (): Air => {
       const air = createAir(40, 30, CW, CH);
       puff(air, 120, 150);
       settle(air, STEP * 5);
@@ -205,7 +206,7 @@ describe("air", () => {
     puff(air, 160, 180);
     settle(air, 30);
     assert.equal(air.stirred, false);
-    assert.ok([air.vx, air.vy, air.dx, air.dy, air.glow].every(still));
+    assert.ok([air.vx, air.vy, air.dx, air.dy, air.glow].every(isStill));
     assert.ok(air.gusts.every((g) => g.age < 0));
   });
 

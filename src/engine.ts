@@ -15,21 +15,21 @@ import {
   EVERY_ROW,
   type Frame,
   type Grid,
+  isStarAt,
   layoutGrid,
   type Stars,
   shadeFrame,
-  starAt,
   stepSparkles,
   TURNS,
 } from "./shade.ts";
 
 export const FULL_RATE = 60;
 export const HALF_RATE = 30;
-export const STEP = 1 / FULL_RATE;
+export const STEP: number = 1 / FULL_RATE;
 const MAX_STEPS = 4;
 const MAX_DT = 0.1;
 const MS_PER_SECOND = 1000;
-const CALM_RATE = FULL_RATE / TURNS;
+const CALM_RATE: number = FULL_RATE / TURNS;
 const PACE_FRAMES = 30;
 const SLOW_MS = 8;
 const QUICK_MS = 5;
@@ -56,7 +56,11 @@ const owing = (owed: number, steps = 0): Readonly<{ owed: number; steps: number 
   return owed >= STEP ? owing(owed - STEP, steps + 1) : { owed, steps };
 };
 
-const advance = (clock: Clock, now: number, due: number) => {
+const advance = (
+  clock: Clock,
+  now: number,
+  due: number,
+): Readonly<{ clock: Clock; dt: number; steps: number }> => {
   const dt = Math.min(MAX_DT, (now - clock.last) / MS_PER_SECOND);
   const { owed, steps } = owing(clock.owed + dt);
   return { clock: { time: clock.time + dt, last: now, owed, drawnAt: due }, dt, steps };
@@ -70,7 +74,8 @@ const paced = (pace: Pace, rate: number, now: number): Pace =>
 const retried = (pace: Pace, now: number): Pace =>
   pace.rate === HALF_RATE && now - pace.since >= RETRY_MS ? paced(pace, FULL_RATE, now) : pace;
 
-const median = (values: readonly number[]) => [...values].sort((a, b) => a - b)[values.length >> 1];
+const median = (values: readonly number[]): number =>
+  [...values].sort((a, b) => a - b)[values.length >> 1];
 
 const timed = (pace: Pace, cost: number, now: number): Pace => {
   const costs = [...pace.costs, cost];
@@ -93,7 +98,11 @@ const PROBE = 100;
 
 type Ink = Readonly<{ up: number; down: number; left: number; right: number }>;
 
-export const fitGlyphs = (ink: Ink, cellWidth: number, cellHeight: number) => {
+export const fitGlyphs = (
+  ink: Ink,
+  cellWidth: number,
+  cellHeight: number,
+): { size: number; x: number; y: number } => {
   const roomWidth = cellWidth - GAP - 2 * PAD;
   const roomHeight = cellHeight - GAP - 2 * PAD;
   const wide = ink.left + ink.right;
@@ -119,7 +128,10 @@ const measureInk = (ctx: CanvasRenderingContext2D): Ink => {
   );
 };
 
-const context2d = (canvas: HTMLCanvasElement, settings: CanvasRenderingContext2DSettings) => {
+const context2d = (
+  canvas: HTMLCanvasElement,
+  settings: CanvasRenderingContext2DSettings,
+): CanvasRenderingContext2D => {
   const ctx = canvas.getContext("2d", settings);
   if (!ctx) {
     throw new Error("ascii-sky: no 2d context");
@@ -177,10 +189,24 @@ export const measureShapes = (cellWidth: number, cellHeight: number): Float32Arr
   );
 };
 
-const layer = (canvas: HTMLCanvasElement) => ({ canvas, ctx: context2d(canvas, {}) });
-const offscreen = () => layer(document.createElement("canvas"));
+type Layer = Readonly<{ canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>;
 
-const createLayers = (canvas: HTMLCanvasElement) => ({
+const layer = (canvas: HTMLCanvasElement): Layer => ({
+  canvas,
+  ctx: context2d(canvas, {}),
+});
+const offscreen = (): Layer => layer(document.createElement("canvas"));
+
+type Layers = Readonly<{
+  main: Layer;
+  mask: Layer;
+  ink: Layer;
+  gaps: Layer;
+  tint: Layer;
+  tiles: Layer;
+}>;
+
+const createLayers = (canvas: HTMLCanvasElement): Layers => ({
   main: layer(canvas),
   mask: offscreen(),
   ink: offscreen(),
@@ -189,7 +215,6 @@ const createLayers = (canvas: HTMLCanvasElement) => ({
   tiles: offscreen(),
 });
 
-type Layers = ReturnType<typeof createLayers>;
 type Images = Readonly<{ colours: ImageData; tiles: ImageData }>;
 
 const sizeLayers = (layers: Layers, grid: Grid): Images => {
@@ -219,10 +244,10 @@ const sizeLayers = (layers: Layers, grid: Grid): Images => {
   };
 };
 
-const stamp = (layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: number) => {
+const stamp = (layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: number): void => {
   const mask = layers.mask.ctx;
   const { columns, columnLeft, columnWidth, rowTop, rowHeight } = grid;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count; i += 1) {
     const k = frame.changed[i];
     const r = (k / columns) | 0;
     const c = k - r * columns;
@@ -238,7 +263,7 @@ const stamp = (layers: Layers, atlas: Atlas, grid: Grid, frame: Frame, count: nu
   }
 };
 
-const composite = (layers: Layers, grid: Grid, images: Images) => {
+const composite = (layers: Layers, grid: Grid, images: Images): void => {
   const { main, mask, ink, gaps, tint, tiles } = layers;
   const { columns, rows, cellWidth, cellHeight, dpr, originX } = grid;
   const left = originX * dpr;
@@ -262,7 +287,7 @@ export type ThemeChoice = SkyTheme | "auto";
 
 export type SkyConfig = Readonly<{
   theme: ThemeChoice;
-  faintFrom: number | null;
+  faintFrom: number | undefined;
   ignore: string;
   night: Stars;
 }>;
@@ -277,7 +302,7 @@ type View = Readonly<{ grid: Grid; atlas: Atlas; frame: Frame; images: Images }>
 type Running = {
   choice: ThemeChoice;
   theme: SkyTheme;
-  view: View | null;
+  view: View | undefined;
   air: Air;
   clock: Clock;
   pace: Pace;
@@ -308,7 +333,7 @@ export const startSky = (
   const sky: Running = {
     choice: chosen,
     theme: themeOf(chosen),
-    view: null,
+    view: undefined,
     air: createAir(0, 0, 1, 1),
     clock: { time: 0, last: 0, owed: 0, drawnAt: Number.NEGATIVE_INFINITY },
     pace: { rate: FULL_RATE, since: 0, costs: [] },
@@ -317,16 +342,16 @@ export const startSky = (
     visible: true,
   };
 
-  const isStar = (c: number, r: number) => {
+  const isStar = (c: number, r: number): boolean => {
     if (!sky.view) {
       return false;
     }
     const { originX, cellWidth, skyOffset } = sky.view.grid;
     const skyColumn = Math.floor((originX + c * cellWidth + skyOffset) / cellWidth);
-    return starAt(skyColumn, r, sky.view.frame.night.stars);
+    return isStarAt(skyColumn, r, sky.view.frame.night.stars);
   };
 
-  const draw = (half: number, every: number) => {
+  const draw = (half: number, every: number): void => {
     const { view } = sky;
     if (!view) {
       return;
@@ -351,7 +376,7 @@ export const startSky = (
     }
   };
 
-  const resize = () => {
+  const resize = (): void => {
     const rect = canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) {
       return;
@@ -385,7 +410,7 @@ export const startSky = (
     draw(EVERY_ROW, TURNS);
   };
 
-  const tick = (now: number) => {
+  const tick = (now: number): void => {
     sky.raf = requestAnimationFrame(tick);
     sky.pace = retried(sky.pace, now);
     const isCalm = !sky.air.lively;
@@ -400,7 +425,7 @@ export const startSky = (
     range(steps).forEach(() => {
       stepAir(sky.air, STEP);
     });
-    const sparkles = sky.theme === "dark" ? sky.view?.frame.sparkles : null;
+    const sparkles = sky.theme === "dark" ? sky.view?.frame.sparkles : undefined;
     if (sky.view && sparkles) {
       stepSparkles(sparkles, dt, sky.view.grid.faintRow, isStar, Math.random);
     }
@@ -412,7 +437,7 @@ export const startSky = (
     }
   };
 
-  const schedule = () => {
+  const schedule = (): void => {
     cancelAnimationFrame(sky.raf);
     if (signal.aborted) {
       return;
@@ -429,27 +454,27 @@ export const startSky = (
     sky.raf = requestAnimationFrame(tick);
   };
 
-  const pointerAt = (e: PointerEvent) => {
+  const pointerAt = (e: PointerEvent): { x: number; y: number } | undefined => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    return x >= 0 && y >= 0 && x <= rect.width && y <= rect.height ? { x, y } : null;
+    return x >= 0 && y >= 0 && x <= rect.width && y <= rect.height ? { x, y } : undefined;
   };
-  const onPointerMove = (e: PointerEvent) => {
+  const onPointerMove = (e: PointerEvent): void => {
     if (reduced.matches || e.pointerType === "touch") {
       return;
     }
-    const at = sky.visible ? pointerAt(e) : null;
+    const at = sky.visible ? pointerAt(e) : undefined;
     if (at) {
       blow(sky.air, at.x, at.y, e.timeStamp);
     } else {
       calm(sky.air);
     }
   };
-  const onPointerDown = (e: PointerEvent) => {
-    const onControl =
+  const onPointerDown = (e: PointerEvent): void => {
+    const isOnControl =
       ignore !== "" && e.target instanceof Element && e.target.closest(ignore) !== null;
-    if (reduced.matches || onControl) {
+    if (reduced.matches || isOnControl) {
       return;
     }
     const at = pointerAt(e);
@@ -457,8 +482,8 @@ export const startSky = (
       puff(sky.air, at.x, at.y);
     }
   };
-  const onLeave = () => calm(sky.air);
-  const onTheme = () => {
+  const onLeave = (): void => calm(sky.air);
+  const onTheme = (): void => {
     const next = themeOf(sky.choice);
     if (signal.aborted || next === sky.theme) {
       return;
@@ -486,11 +511,11 @@ export const startSky = (
   schedule();
 
   return {
-    setTheme: (next) => {
+    setTheme: (next: ThemeChoice): void => {
       sky.choice = next;
       onTheme();
     },
-    stop: () => {
+    stop: (): void => {
       listening.abort();
       cancelAnimationFrame(sky.raf);
       sized.disconnect();

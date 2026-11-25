@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { createAir } from "./air.ts";
-import { GLYPHS, OPEN_SKY, range, SKY_RAMP, type SkyCells } from "./cells.ts";
+import { type Air, createAir } from "./air.ts";
+import { GLYPHS, type Look, OPEN_SKY, range, SKY_RAMP, type SkyCells } from "./cells.ts";
 import {
   breathing,
   createFrame,
   createSparkles,
   EVERY_ROW,
+  type Frame,
+  type Grid,
   layoutGrid,
   MOST,
   NO_STARS,
@@ -22,15 +24,28 @@ import {
 
 const CELL = { width: 6, height: 9.75 };
 const CLOUD = GLYPHS.indexOf("8");
-const sky = (density: number) =>
+const sky = (density: number): number =>
   GLYPHS.indexOf(SKY_RAMP[Math.round(density * (SKY_RAMP.length - 1))]);
 
-const fakeCells = (density: number, cloudFrom = Number.POSITIVE_INFINITY) => {
+const fakeCells = (
+  density: number,
+  cloudFrom = Number.POSITIVE_INFINITY,
+): { cells: SkyCells; seen: { cells: number; push: number[] } } => {
   const seen = { cells: 0, push: [0, 0] };
   const cells: SkyCells = {
     at:
       () =>
-      (left, _top, _width, _height, look, _index, _shown, pushX = 0, pushY = 0) => {
+      (
+        left: number,
+        _top: number,
+        _width: number,
+        _height: number,
+        look: Look,
+        _index: number,
+        _shown: number,
+        pushX = 0,
+        pushY = 0,
+      ) => {
         seen.cells += 1;
         if (pushX || pushY) {
           seen.push = [pushX, pushY];
@@ -46,7 +61,12 @@ const fakeCells = (density: number, cloudFrom = Number.POSITIVE_INFINITY) => {
   return { cells, seen };
 };
 
-const setup = (width = 400, height = 240, faint = 0, night: Stars = NO_STARS) => {
+const setup = (
+  width = 400,
+  height = 240,
+  faint = 0,
+  night: Stars = NO_STARS,
+): { grid: Grid; frame: Frame; air: Air } => {
   const grid = layoutGrid(width, height, 1, width, CELL, faint);
   const n = grid.columns * grid.rows * 4;
   const frame = createFrame(grid, new Uint8ClampedArray(n), new Uint8ClampedArray(n), night);
@@ -143,14 +163,14 @@ describe("faint rows", () => {
     const { grid, frame, air } = setup(400, 240, 150);
     const { cells, seen } = fakeCells(0.5);
     shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
-    const asked = (half: number) => {
+    const asked = (half: number): number => {
       seen.cells = 0;
       shadeFrame(grid, cells, air, frame, 0, "light", half, 1, 0);
       return seen.cells;
     };
     const rows = range(grid.rows);
     const full = rows.filter((r) => r < grid.faintRow).length * grid.columns;
-    const turn = (half: number) =>
+    const turn = (half: number): number =>
       rows.filter((r) => r >= grid.faintRow && (r & 1) === half).length * grid.columns;
     assert.ok(grid.faintRow < grid.rows);
     assert.equal(asked(0), full + turn(0));
@@ -188,7 +208,7 @@ describe("turns", () => {
     const { cells, seen } = fakeCells(0.5);
     shadeFrame(grid, cells, air, frame, 0, "light", EVERY_ROW, 1, 0);
     air.stirred = true;
-    const k = Number(grid.columns) + 5;
+    const k = grid.columns + 5;
     air.glow[k] = 0.5;
     air.dx[k + 1] = 3;
     seen.cells = 0;
@@ -200,11 +220,11 @@ describe("turns", () => {
 
 describe("wind", () => {
   test("in the sunset sky colours open sky's glyphs and tiles cyan; by day only its glyphs", () => {
-    const at = (theme: "light" | "sunset") => {
+    const at = (theme: "light" | "sunset"): { glyph: number[]; tile: number[] } => {
       const { grid, frame, air } = setup(400, 240);
       const { cells } = fakeCells(0.5);
       air.stirred = true;
-      const k = Number(grid.columns) + 5;
+      const k = grid.columns + 5;
       air.glow[k] = 0.4;
       shadeFrame(grid, cells, air, frame, 0, theme, EVERY_ROW, 1, 0);
       return {
@@ -232,7 +252,7 @@ describe("night", () => {
     const sp = frame.sparkles;
     assert.ok(sp);
     shadeFrame(grid, cells, air, frame, 0, "dark", EVERY_ROW, 3, 0);
-    const k = Number(grid.columns) + 4;
+    const k = grid.columns + 4;
     sp.code[k] = GLYPHS.indexOf("*");
     sp.tint[k] = 1;
     sp.touched[k] = 1;
@@ -258,7 +278,7 @@ describe("night", () => {
 });
 
 describe("streak", () => {
-  const g = (s: string) => GLYPHS.indexOf(s);
+  const g = (s: string): number => GLYPHS.indexOf(s);
   test("level wind is a dash, a tilde when it glows hard", () => {
     assert.equal(streak(100, 10, 0.5), g("-"));
     assert.equal(streak(-100, 10, 0.9), g("~"));
@@ -340,27 +360,27 @@ describe("layoutGrid", () => {
   });
 });
 
-const seeded = (seed = 1) => {
+const seeded = (seed = 1): (() => number) => {
   const state = { s: seed };
-  return () => {
+  return (): number => {
     state.s = (state.s * 1_664_525 + 1_013_904_223) >>> 0;
     return state.s / 4_294_967_296;
   };
 };
-const shown = (code: Int16Array) => [...code].filter((c) => c >= 0).length;
+const shown = (code: Int16Array): number => [...code].filter((c) => c >= 0).length;
 
 describe("sparkles", () => {
   test("come out only on stars, within the rows asked for", () => {
     const sp = createSparkles(60, 40);
     const random = seeded(3);
-    const star = (c: number, r: number) => (c * 7 + r * 13) % 11 === 0;
+    const isStar = (c: number, r: number): boolean => (c * 7 + r * 13) % 11 === 0;
     range(40).forEach(() => {
-      stepSparkles(sp, TICK, 20, star, random);
+      stepSparkles(sp, TICK, 20, isStar, random);
     });
     sp.pool
       .filter((s) => s.steps.length > 0)
       .forEach((s) => {
-        assert.ok(star(s.column, s.row));
+        assert.ok(isStar(s.column, s.row));
         assert.ok(s.row >= 1 && s.row < 20);
       });
     assert.ok(shown(sp.code) > 0);

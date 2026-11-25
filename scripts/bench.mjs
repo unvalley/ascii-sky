@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { blow, createAir, puff, stepAir } from "../src/air.ts";
 import { GLYPHS, REGION_COUNT, RGBA, range, skyCells, sunsetColours } from "../src/cells.ts";
@@ -29,7 +29,7 @@ const pixelsOf = async (name) => {
 const [light, dark, near, far] = await Promise.all(
   ["sky-light.webp", "sky-dark.webp", "clouds-near.webp", "clouds-far.webp"].map(pixelsOf),
 );
-const text = readFileSync(`${ROOT}/assets/sky.txt`, "utf8");
+const text = await readFile(`${ROOT}/assets/sky.txt`, "utf8");
 const cells = skyCells({
   still: {
     columns: sky.columns,

@@ -21,8 +21,8 @@ export const sky = {
   version: "0654411dbe",
 };
 
-export const SKY_WIDTH = sky.columns * sky.cellWidth;
-export const SKY_HEIGHT = sky.rows * sky.cellHeight;
+export const SKY_WIDTH: number = sky.columns * sky.cellWidth;
+export const SKY_HEIGHT: number = sky.rows * sky.cellHeight;
 
 const SKY_FILES = {
   text: "sky.txt",
@@ -35,15 +35,15 @@ const SKY_FILES = {
 export type SkyAssets = string | Readonly<Record<keyof typeof SKY_FILES, string>>;
 
 const DEFAULT_ASSETS = "/ascii-sky/";
-const CELL = { width: sky.cellWidth, height: sky.cellHeight };
+const CELL: { width: number; height: number } = { width: sky.cellWidth, height: sky.cellHeight };
 
-const skyUrl = (assets: SkyAssets, file: keyof typeof SKY_FILES): string => {
-  if (typeof assets !== "string") {
-    return assets[file];
-  }
-  const base = assets.endsWith("/") ? assets : `${assets}/`;
+const urlIn = (folder: string, file: keyof typeof SKY_FILES): string => {
+  const base = folder.endsWith("/") ? folder : `${folder}/`;
   return `${base}${SKY_FILES[file]}?v=${sky.version}`;
 };
+
+const skyUrl = (assets: SkyAssets, file: keyof typeof SKY_FILES): string =>
+  typeof assets === "string" ? urlIn(assets, file) : assets[file];
 
 const fetched = async (url: string, signal: AbortSignal): Promise<Response> => {
   const response = await fetch(url, { signal });
@@ -139,13 +139,13 @@ export const mountSky = (
   }: MountOptions = {},
 ): MountedSky => {
   const loading = new AbortController();
-  const mounted: { theme: ThemeChoice; running: Sky | null } = { theme, running: null };
+  const mounted: { theme: ThemeChoice; running: Sky | undefined } = { theme, running: undefined };
   const ready = loadSky(assets, loading.signal).then(
     (cells) => {
       if (!loading.signal.aborted) {
         mounted.running = startSky(canvas, cells, SKY_WIDTH, CELL, {
           theme: mounted.theme,
-          faintFrom: faintFrom ?? null,
+          faintFrom,
           ignore,
           night,
         });
@@ -159,11 +159,11 @@ export const mountSky = (
   );
   return {
     ready,
-    setTheme: (next) => {
+    setTheme: (next: ThemeChoice): void => {
       mounted.theme = next;
       mounted.running?.setTheme(next);
     },
-    stop: () => {
+    stop: (): void => {
       loading.abort();
       mounted.running?.stop();
     },

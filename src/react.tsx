@@ -1,5 +1,5 @@
 "use client";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type ReactElement, useEffect, useRef, useState } from "react";
 import { type MountedSky, type MountOptions, mountSky, SKY_HEIGHT, stillSky } from "./index.ts";
 
 export type AsciiSkyProps = MountOptions & {
@@ -18,45 +18,45 @@ export const AsciiSky = ({
   night,
   className,
   style,
-}: AsciiSkyProps) => {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const sky = useRef<MountedSky | null>(null);
-  const [drawn, setDrawn] = useState(false);
-  const themeNow = useRef(theme);
+}: AsciiSkyProps): ReactElement => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const skyRef = useRef<MountedSky | undefined>(undefined);
+  const [isDrawn, setIsDrawn] = useState<boolean>(false);
+  const themeRef = useRef(theme);
 
   useEffect(() => {
-    const element = canvas.current;
+    const element = canvasRef.current;
     if (!element) {
       return;
     }
     const mounted = mountSky(element, {
-      theme: themeNow.current,
+      theme: themeRef.current,
       assets,
       faintFrom,
       ignore,
       night,
     });
-    sky.current = mounted;
+    skyRef.current = mounted;
     mounted.ready
       .then(() => {
-        if (sky.current === mounted) {
-          setDrawn(true);
+        if (skyRef.current === mounted) {
+          setIsDrawn(true);
         }
       })
       .catch(() => undefined);
-    return () => {
+    return (): void => {
       mounted.stop();
-      sky.current = null;
-      setDrawn(false);
+      skyRef.current = undefined;
+      setIsDrawn(false);
     };
   }, [assets, faintFrom, ignore, night]);
 
   useEffect(() => {
-    themeNow.current = theme;
-    sky.current?.setTheme(theme);
+    themeRef.current = theme;
+    skyRef.current?.setTheme(theme);
   }, [theme]);
 
-  const still = theme === "auto" ? null : stillSky(theme, assets);
+  const still = theme === "auto" ? undefined : stillSky(theme, assets);
   return (
     <div
       aria-hidden="true"
@@ -71,12 +71,14 @@ export const AsciiSky = ({
         ...style,
       }}
     >
-      {still ? (
-        <div style={{ ...fill, ...still, opacity: drawn ? 0 : still.opacity, transition: FADE }} />
-      ) : null}
+      {still !== undefined && (
+        <div
+          style={{ ...fill, ...still, opacity: isDrawn ? 0 : still.opacity, transition: FADE }}
+        />
+      )}
       <canvas
-        ref={canvas}
-        style={{ ...fill, display: "block", opacity: drawn ? 1 : 0, transition: FADE }}
+        ref={canvasRef}
+        style={{ ...fill, display: "block", opacity: isDrawn ? 1 : 0, transition: FADE }}
       />
     </div>
   );

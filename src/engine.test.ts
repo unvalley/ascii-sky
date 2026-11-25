@@ -43,7 +43,7 @@ describe("fitGlyphs", () => {
   });
 });
 
-const drawnIn = (hz: number, rate: number, seconds = 1) =>
+const drawnIn = (hz: number, rate: number, seconds = 1): number =>
   range(hz * seconds).reduce(
     (clock, i) => {
       const due = beat(clock.drawnAt, rate, ((i + 1) * 1000) / hz);

@@ -1,10 +1,10 @@
 /// <reference types="vite/client" />
 import { mountSky, SKY_HEIGHT, type SkyTheme, stillSky, type ThemeChoice } from "../src/index.ts";
 
-const CHOICES: readonly string[] = ["auto", "light", "sunset", "dark"];
+const CHOICES: readonly ThemeChoice[] = ["auto", "light", "sunset", "dark"];
 const STORE_KEY = "ascii-sky-theme";
 
-const root = document.documentElement;
+const root: HTMLElement = document.documentElement;
 const box = document.querySelector<HTMLElement>(".sky");
 const canvas = document.querySelector<HTMLCanvasElement>(".sky canvas");
 const still = document.querySelector<HTMLElement>(".sky-still");
@@ -13,7 +13,7 @@ if (!(box && canvas && still && themes)) {
   throw new Error("demo: the sky's elements are missing");
 }
 
-const assets = import.meta.env.BASE_URL;
+const assets: string = import.meta.env.BASE_URL;
 const darkScheme = globalThis.matchMedia("(prefers-color-scheme: dark)");
 const skyFor = (wanted: ThemeChoice): SkyTheme => {
   if (wanted !== "auto") {
@@ -22,31 +22,28 @@ const skyFor = (wanted: ThemeChoice): SkyTheme => {
   return darkScheme.matches ? "dark" : "light";
 };
 
-const load = (): string | null => {
-  try {
-    return localStorage.getItem(STORE_KEY);
-  } catch {
-    return null;
-  }
-};
-const save = (value: string): boolean => {
-  try {
-    localStorage.setItem(STORE_KEY, value);
-    return true;
-  } catch {
-    return false;
-  }
-};
+const choiceOf = (value: unknown): ThemeChoice =>
+  CHOICES.find((choice) => choice === value) ?? "auto";
 
-const saved = load();
-const first = (saved !== null && CHOICES.includes(saved) ? saved : "auto") as ThemeChoice;
-const chosen = () => (root.dataset.theme ?? "auto") as ThemeChoice;
+const stored = <T>(use: (storage: Storage) => T, otherwise: T): T => {
+  try {
+    return use(localStorage);
+  } catch {
+    return otherwise;
+  }
+};
+const load = (): ThemeChoice => stored((storage) => choiceOf(storage.getItem(STORE_KEY)), "auto");
+const save = (value: ThemeChoice): void =>
+  stored((storage) => storage.setItem(STORE_KEY, value), undefined);
+
+const first = load();
+const chosen = (): ThemeChoice => choiceOf(root.dataset.theme);
 
 box.style.height = `${SKY_HEIGHT}px`;
 const sky = mountSky(canvas, { assets, theme: first });
 
-const buttons = [...themes.querySelectorAll<HTMLButtonElement>("button")];
-const show = (choice: ThemeChoice) => {
+const buttons: HTMLButtonElement[] = [...themes.querySelectorAll<HTMLButtonElement>("button")];
+const show = (choice: ThemeChoice): void => {
   root.dataset.theme = choice;
   const { background, imageRendering, opacity } = stillSky(skyFor(choice), assets);
   still.style.background = background;
@@ -57,11 +54,12 @@ const show = (choice: ThemeChoice) => {
   });
 };
 themes.addEventListener("click", (event) => {
-  const button = (event.target as Element).closest<HTMLButtonElement>("button");
+  const button =
+    event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button") : undefined;
   if (!button) {
     return;
   }
-  const choice = (button.dataset.theme ?? "auto") as ThemeChoice;
+  const choice = choiceOf(button.dataset.theme);
   save(choice);
   sky.setTheme(choice);
   show(choice);

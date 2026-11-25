@@ -13,16 +13,16 @@
     "hero",
     "react"
   ],
-  "license": "MIT",
-  "author": "unvalley",
   "homepage": "https://github.com/unvalley/ascii-sky#readme",
+  "bugs": "https://github.com/unvalley/ascii-sky/issues",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/unvalley/ascii-sky.git"
   },
-  "bugs": "https://github.com/unvalley/ascii-sky/issues",
-  "type": "module",
+  "license": "MIT",
+  "author": "unvalley",
   "sideEffects": false,
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -40,23 +40,15 @@
     "assets"
   ],
   "scripts": {
+    "bench": "node scripts/bench.mjs",
     "build": "tsc -p tsconfig.build.json",
+    "build:demo": "vite build demo",
     "check": "tsc",
+    "dev": "vite demo",
     "lint": "biome check --error-on-warnings",
     "lint:fix": "biome check --write",
-    "test": "node --test \"src/*.test.ts\"",
-    "bench": "node scripts/bench.mjs",
-    "dev": "vite demo",
-    "build:demo": "vite build demo",
-    "prepare": "tsc -p tsconfig.build.json"
-  },
-  "peerDependencies": {
-    "react": ">=18"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    }
+    "prepare": "tsc -p tsconfig.build.json",
+    "test": "node --test \"src/*.test.ts\""
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.9",
@@ -68,6 +60,14 @@
     "sharp": "^0.35.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "packageManager": "pnpm@12.23.0"
 }

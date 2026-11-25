@@ -8,6 +8,7 @@ import {
   drift,
   GLYPHS,
   hash,
+  type Look,
   measureGlyph,
   normaliseShapes,
   OPEN_SKY,
@@ -38,7 +39,7 @@ const layer = (cloud: number, shade = 0): CloudLayer => {
   };
 };
 
-const sky = (near: CloudLayer, far = layer(0)) => {
+const sky = (near: CloudLayer, far = layer(0)): SkyCells => {
   const columns = 20;
   const rows = 8;
   const rgb = new Uint8ClampedArray(columns * rows * 4).fill(180);
@@ -59,7 +60,13 @@ const sky = (near: CloudLayer, far = layer(0)) => {
 
 const CELL_WIDTH = 8;
 const CELL_HEIGHT = 12;
-const shadeAt = (cells: SkyCells, seconds: number, theme: SkyTheme, x: number, y: number) => {
+const shadeAt = (
+  cells: SkyCells,
+  seconds: number,
+  theme: SkyTheme,
+  x: number,
+  y: number,
+): { code: number; look: Look } => {
   const look = createLook();
   const index = cells.indexAt(x + CELL_WIDTH / 2, y + CELL_HEIGHT / 2);
   const code = cells.at(seconds, theme)(x, y, CELL_WIDTH, CELL_HEIGHT, look, index, BLANK, 0, 0);
@@ -102,7 +109,7 @@ describe("bigClouds", () => {
   const clouds = (...squares: [number, number, number][]): CloudLayer => {
     const width = 64;
     const height = 32;
-    const inside = (x: number, y: number) =>
+    const isInside = (x: number, y: number): boolean =>
       squares.some(
         ([x0, y0, side]) => y >= y0 && y < y0 + side && (((x - x0) % width) + width) % width < side,
       );
@@ -110,13 +117,14 @@ describe("bigClouds", () => {
     return {
       pixels: Uint8ClampedArray.from({ length: width * height * 4 }, (_, i) => {
         const k = Math.floor(i / 4);
-        return inside(k % width, Math.floor(k / width)) ? cloud[i % 4] : 0;
+        return isInside(k % width, Math.floor(k / width)) ? cloud[i % 4] : 0;
       }),
       width,
       height,
     };
   };
-  const cloudAt = (l: CloudLayer, x: number, y: number) => l.pixels[(y * l.width + x) * 4 + 1];
+  const cloudAt = (l: CloudLayer, x: number, y: number): number =>
+    l.pixels[(y * l.width + x) * 4 + 1];
 
   test("leaves out clouds smaller than asked and keeps the rest as they were", () => {
     const both = clouds([2, 2, 3], [20, 10, 10]);
@@ -177,7 +185,13 @@ describe("glyph shapes", () => {
 });
 
 describe("reachOf", () => {
-  const slowly = (pixels: Uint8ClampedArray, lw: number, lh: number, rx: number, ry: number) =>
+  const slowly = (
+    pixels: Uint8ClampedArray,
+    lw: number,
+    lh: number,
+    rx: number,
+    ry: number,
+  ): Uint8Array<ArrayBuffer> =>
     Uint8Array.from({ length: lw * lh }, (_, k) => {
       const i = k % lw;
       const j = (k - i) / lw;
@@ -239,15 +253,15 @@ describe("hash", () => {
   });
 
   test("gives neighbours and streams unrelated numbers", () => {
-    const close = (a: number, b: number) => Math.abs(a - b) < 0.005;
+    const isClose = (a: number, b: number): boolean => Math.abs(a - b) < 0.005;
     const same =
-      range(1000).filter((x) => close(hash(x, 0, 1), hash(x + 1, 0, 1))).length +
-      range(1000).filter((x) => close(hash(x, 0, 23), hash(x, 0, 37))).length;
+      range(1000).filter((x) => isClose(hash(x, 0, 1), hash(x + 1, 0, 1))).length +
+      range(1000).filter((x) => isClose(hash(x, 0, 23), hash(x, 0, 37))).length;
     assert.ok(same < 45, `${same} near pairs`);
   });
 });
 
-const slow = (x: number, n: number) => {
+const slow = (x: number, n: number): number => {
   const w = x % n;
   return w < 0 ? w + n : w;
 };
@@ -280,11 +294,11 @@ const text = Array.from(
   () => `${SKY_RAMP[0]}${SKY_RAMP[4]}${SKY_RAMP.at(-1)}`,
 ).join("\n");
 const colours = sunsetColours(COLUMNS, ROWS, CH, text);
-const at = (c: number, r: number) => {
+const at = (c: number, r: number): number[] => {
   const o = (r * COLUMNS + c) * 4;
   return [colours[o], colours[o + 1], colours[o + 2], colours[o + 3]];
 };
-const hue = ([r, g, b]: number[]) => {
+const hue = ([r, g, b]: number[]): number => {
   const [, a, bb] = oklab(r, g, b);
   return ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360;
 };
@@ -306,9 +320,10 @@ describe("sunsetColours", () => {
 
   test("is deeper where the painting's blue is denser", () => {
     [0, 20, 40].forEach((r) => {
-      const [light, middle, dense] = [0, 1, 2].map(
-        (c) => oklab(...(at(c, r).slice(0, 3) as [number, number, number]))[0],
-      );
+      const [light, middle, dense] = [0, 1, 2].map((c) => {
+        const [red, green, blue] = at(c, r);
+        return oklab(red, green, blue)[0];
+      });
       assert.ok(light > middle && middle > dense, `row ${r}: ${light} ${middle} ${dense}`);
     });
   });

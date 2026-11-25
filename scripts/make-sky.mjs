@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import {
@@ -442,6 +442,13 @@ const convert = async (clear) => {
   const chromaOf = (c) => Math.max(...c) - Math.min(...c);
   const perCell = SAMPLES.across * SAMPLES.down;
 
+  const inkedCell = (r, c, inked, coverage) => {
+    const mean = inked
+      .reduce((sum, p) => sum.map((v, i) => v + p[i]), [0, 0, 0])
+      .map((v) => v / inked.length);
+    return { r, c, coverage, mean, part: chromaOf(mean) < SHADE_CHROMA_BELOW ? "shade" : "sky" };
+  };
+
   const found = range(rows * columns).map((k) => {
     const c = k % columns;
     const r = (k - c) / columns;
@@ -454,13 +461,7 @@ const convert = async (clear) => {
       )
       .filter((p) => lum(p) < INK.lumBelow || chromaOf(p) >= INK.chromaFrom);
     const coverage = inked.length / perCell;
-    if (coverage < INK.coverageFrom) {
-      return null;
-    }
-    const mean = inked
-      .reduce((sum, p) => sum.map((v, i) => v + p[i]), [0, 0, 0])
-      .map((v) => v / inked.length);
-    return { r, c, coverage, mean, part: chromaOf(mean) < SHADE_CHROMA_BELOW ? "shade" : "sky" };
+    return coverage < INK.coverageFrom ? undefined : inkedCell(r, c, inked, coverage);
   });
 
   const { across, down } = NEIGHBOURHOOD;
@@ -471,9 +472,9 @@ const convert = async (clear) => {
     const near = around
       .map(([dr, dc]) => {
         const o = found[(cell.r + dr) * columns + cell.c + dc];
-        const inside =
+        const isInside =
           cell.r + dr >= 0 && cell.r + dr < rows && cell.c + dc >= 0 && cell.c + dc < columns;
-        return o && o.part === cell.part && inside ? { o, k: weightOf([dr, dc]) } : null;
+        return o && o.part === cell.part && isInside ? { o, k: weightOf([dr, dc]) } : undefined;
       })
       .filter(Boolean);
     const s = near.reduce((sum, { o, k }) => sum + k * lum(o.mean), 0);
@@ -493,10 +494,7 @@ const convert = async (clear) => {
       return [part, { low: q(DARK_RANGE.low), high: q(DARK_RANGE.high) }];
     }),
   );
-  const cells = darkened.map((cell) => {
-    if (!cell) {
-      return null;
-    }
+  const shaded = (cell) => {
     const { low, high } = spread[cell.part];
     const t = Math.max(0, Math.min(1, (cell.dark - low) / (high - low || 1)));
     const i = Math.round(t * GLYPH_STEPS[cell.part]);
@@ -505,7 +503,8 @@ const convert = async (clear) => {
       shadow: Math.max(0, Math.min(1, (1 - lum(cell.mean) - SHADOW.offset) / SHADOW.span)),
       glyph: SKY_RAMP[cell.coverage < THIN_COVERAGE ? Math.min(i, 1) : i],
     };
-  });
+  };
+  const cells = darkened.map((cell) => (cell === undefined ? undefined : shaded(cell)));
 
   const mapFor = (mode) =>
     Uint8Array.from(cells.flatMap((cell) => colourOf(cell, mode).map((v) => Math.round(v))));
@@ -682,7 +681,7 @@ const place = (layer, sp, { x, base, scale, wide, flip }) => {
     const y = (k - px) / SKY_WIDTH - top;
     const xx = (((px - left) % SKY_WIDTH) + SKY_WIDTH) % SKY_WIDTH;
     if (y < 0 || y >= h || xx >= w) {
-      return null;
+      return;
     }
     const sx0 = (xx / w) * sp.w;
     const sx1 = ((xx + 1) / w) * sp.w;
@@ -695,7 +694,7 @@ const place = (layer, sp, { x, base, scale, wide, flip }) => {
     );
     const a = box.reduce((sum, i) => sum + sp.a[i], 0) / box.length;
     const as = box.reduce((sum, i) => sum + sp.a[i] * sp.s[i], 0);
-    return a > 0 ? { a, s: as / box.length / a } : null;
+    return a > 0 ? { a, s: as / box.length / a } : undefined;
   };
   const first = Math.max(0, top);
   const rows = Math.max(0, Math.min(SKY_HEIGHT, top + h) - first);
@@ -703,7 +702,7 @@ const place = (layer, sp, { x, base, scale, wide, flip }) => {
   const mixed = (from, under) =>
     Float32Array.from(drops, (drop, b) => {
       const k = first * SKY_WIDTH + b;
-      return drop ? under(drop, k) : from[k];
+      return drop === undefined ? from[k] : under(drop, k);
     });
   const a = layer.a.slice();
   const s = layer.s.slice();
@@ -747,49 +746,56 @@ const placeClouds = (cutOuts) => {
   return { width, height, near: halve(laid(NEAR)), far: halve(laid(FAR)) };
 };
 
-const [input, sheet] = process.argv.slice(2);
-if (!input) {
-  console.error("usage: node scripts/make-sky.mjs sky.png [sprites.png]");
-  process.exit(1);
-}
-const sprites = await cutClouds(input);
-if (sheet) {
-  await writeSheet(sprites, sheet);
-  console.log(`cut-outs in ${sheet}`);
-  process.exit(0);
-}
-const still = await convert(clearSky(await band(input)));
-const clouds = placeClouds(sprites);
-
-writeFileSync(`${ASSETS}sky.txt`, still.text);
-await Promise.all([
-  ...["light", "dark"].map((mode) =>
-    raw(still.maps[mode], still.columns, still.rows)
-      .webp({ quality: 90, smartSubsample: true })
-      .toFile(`${ASSETS}sky-${mode}.webp`),
-  ),
-  ...["near", "far"].map((layer) =>
-    raw(clouds[layer], clouds.width, clouds.height)
-      .webp({ lossless: true, effort: 6 })
-      .toFile(`${ASSETS}clouds-${layer}.webp`),
-  ),
-]);
-const version = [
+const ASSET_FILES = [
   "sky.txt",
   "sky-light.webp",
   "sky-dark.webp",
   "clouds-near.webp",
   "clouds-far.webp",
-]
-  .reduce((hash, file) => hash.update(readFileSync(`${ASSETS}${file}`)), createHash("sha256"))
-  .digest("hex")
-  .slice(0, VERSION_LENGTH);
-const block = `export const sky = {
+];
+
+const main = async ([input, sheet]) => {
+  if (!input) {
+    console.error("usage: node scripts/make-sky.mjs sky.png [sprites.png]");
+    process.exitCode = 1;
+    return;
+  }
+  const sprites = await cutClouds(input);
+  if (sheet) {
+    await writeSheet(sprites, sheet);
+    console.log(`cut-outs in ${sheet}`);
+    return;
+  }
+  const still = await convert(clearSky(await band(input)));
+  const clouds = placeClouds(sprites);
+
+  await writeFile(`${ASSETS}sky.txt`, still.text);
+  await Promise.all([
+    ...["light", "dark"].map((mode) =>
+      raw(still.maps[mode], still.columns, still.rows)
+        .webp({ quality: 90, smartSubsample: true })
+        .toFile(`${ASSETS}sky-${mode}.webp`),
+    ),
+    ...["near", "far"].map((layer) =>
+      raw(clouds[layer], clouds.width, clouds.height)
+        .webp({ lossless: true, effort: 6 })
+        .toFile(`${ASSETS}clouds-${layer}.webp`),
+    ),
+  ]);
+  const written = await Promise.all(ASSET_FILES.map((file) => readFile(`${ASSETS}${file}`)));
+  const version = written
+    .reduce((hash, data) => hash.update(data), createHash("sha256"))
+    .digest("hex")
+    .slice(0, VERSION_LENGTH);
+  const block = `export const sky = {
   columns: ${still.columns},
   rows: ${still.rows},
   cellWidth: ${CELL_WIDTH},
   cellHeight: ${CELL_HEIGHT},
   version: "${version}",
 };`;
-writeFileSync(INDEX, readFileSync(INDEX, "utf8").replace(SKY_BLOCK, block));
-console.log(`assets/ and src/index.ts written, version ${version}`);
+  await writeFile(INDEX, (await readFile(INDEX, "utf8")).replace(SKY_BLOCK, block));
+  console.log(`assets/ and src/index.ts written, version ${version}`);
+};
+
+await main(process.argv.slice(2));

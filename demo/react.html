@@ -2,17 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
     <title>ascii-sky · React</title>
     <style>
-      body { margin: 0; background: #fafafa; color: #171717; font: 16px/1.6 system-ui, sans-serif; }
-      body[data-theme="dark"] { background: #171717; color: #ededed; }
-      main { max-width: 36rem; margin: 0 auto; padding: 2rem 1rem; }
-      button { font: inherit; margin-right: 0.5rem; }
+      @layer demo {
+        body { margin: 0; font: 16px/1.6 system-ui, sans-serif; color: #171717; background: #fafafa; }
+        body[data-theme="dark"] { color: #ededed; background: #171717; }
+        main { max-inline-size: 36rem; padding-block: 2rem; padding-inline: 1rem; margin-block: 0; margin-inline: auto; }
+        button { margin-inline-end: 0.5rem; font: inherit; }
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="./react.tsx"></script>
+    <script src="./react.tsx" type="module" ></script>
   </body>
 </html>
