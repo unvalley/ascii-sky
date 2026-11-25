@@ -5,14 +5,12 @@ import {
   BYTE_MAX,
   CENTRE,
   type CellAt,
-  DENSITY,
-  GLYPH_RGB,
+  createLook,
   glyphOf,
   hash,
   hex,
-  LOOK_SLOTS,
+  type Look,
   OPEN_SKY,
-  RGB,
   RGBA,
   range,
   rounded,
@@ -21,8 +19,6 @@ import {
   type SkyTheme,
   span,
   TAU,
-  TILE_ALPHA,
-  TILE_RGB,
 } from "./cells.ts";
 
 const SINE_SIZE = 4096;
@@ -331,7 +327,7 @@ export type Frame = Readonly<{
   shown: Int16Array;
   changed: Int32Array;
   breath: Float32Array;
-  look: number[];
+  look: Look;
   night: Stars;
   sparkles: Sparkles | null;
 }>;
@@ -359,7 +355,7 @@ export const createFrame = (
     shown: new Int16Array(columns * rows).fill(UNDRAWN),
     changed: new Int32Array(columns * rows),
     breath: breathing(columns, rows),
-    look: range(LOOK_SLOTS).map(() => 0),
+    look: createLook(),
     night,
     sparkles: night.sparkle ? createSparkles(columns, rows) : null,
   };
@@ -377,10 +373,30 @@ export const streak = (vx: number, vy: number, glow: number): number => {
   return vx * vy < 0 ? RISING : FALLING;
 };
 
-const paint = (look: number[], rgb: readonly number[]) => {
-  look[GLYPH_RGB] = rgb[0];
-  look[GLYPH_RGB + 1] = rgb[1];
-  look[GLYPH_RGB + 2] = rgb[2];
+const paint = (glyph: Float64Array, rgb: readonly number[]) => {
+  glyph[0] = rgb[0];
+  glyph[1] = rgb[1];
+  glyph[2] = rgb[2];
+};
+
+const indexTables = new WeakMap<SkyCells, WeakMap<Grid, Int32Array>>();
+
+const stillIndexes = (cells: SkyCells, grid: Grid): Int32Array => {
+  const forSky = indexTables.get(cells) ?? new WeakMap<Grid, Int32Array>();
+  indexTables.set(cells, forSky);
+  const known = forSky.get(grid);
+  if (known) {
+    return known;
+  }
+  const { columns, rows, originX, cellWidth, cellHeight, skyOffset } = grid;
+  const made = Int32Array.from({ length: columns * rows }, (_, k) => {
+    const c = k % columns;
+    const r = (k - c) / columns;
+    const left = originX + c * cellWidth + skyOffset;
+    return cells.indexAt(left + cellWidth / 2, r * cellHeight + cellHeight / 2);
+  });
+  forSky.set(grid, made);
+  return made;
 };
 
 type Pass = Readonly<{
@@ -388,6 +404,7 @@ type Pass = Readonly<{
   frame: Frame;
   air: Air;
   cellAt: CellAt;
+  indexes: Int32Array;
   t: number;
   glow: readonly number[];
   windTint: Readonly<{ glyph: number; tile: number }>;
@@ -398,10 +415,12 @@ type Pass = Readonly<{
 }>;
 
 const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number): number => {
-  const { grid, frame, air, cellAt, t, glow, windTint, stars, sparks, across, down } = pass;
+  const { grid, frame, air, cellAt, indexes, t, glow, windTint, stars, sparks, across, down } =
+    pass;
   const { columns, cellWidth, cellHeight, originX, skyOffset } = grid;
   const { colours, tiles, shown, changed, breath, look, night } = frame;
   const { stirred, vx, vy, dx, dy } = air;
+  const { glyph, tile } = look;
   const densest = RAMP.length - 1;
   const y = r * cellHeight;
   let changes = changesSoFar;
@@ -418,6 +437,7 @@ const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number)
       cellWidth,
       cellHeight,
       look,
+      indexes[k],
       was >= 0 ? was : BLANK,
       stirred ? dx[k] : 0,
       stirred ? dy[k] : 0,
@@ -430,15 +450,15 @@ const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number)
       const breathe = unit(sine(t * pace + phase));
       const band = BAND.light + BAND.depth * across[c] * down;
       alpha = (BREATH.floor + BREATH.depth * breathe) * band;
-      look[TILE_ALPHA] *= band;
-      code = RAMP[rounded(look[DENSITY] * densest)];
+      look.tileAlpha *= band;
+      code = RAMP[rounded(look.density * densest)];
       if (stars > 0) {
         const skyColumn = Math.floor((originX + c * cellWidth + skyOffset) / cellWidth);
         if (starAt(skyColumn, r, stars)) {
           code = STAR[(hash(skyColumn, r, STAR_SEED.glyph) * STAR.length) | 0];
           const twinkle = unit(sine(t * TWINKLE.speed * pace + phase));
           alpha = TWINKLE.floor + TWINKLE.depth * twinkle;
-          paint(look, night.star);
+          paint(glyph, night.star);
         }
       }
       if (sparks) {
@@ -446,7 +466,7 @@ const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number)
         sparks.touched[k] = 0;
         if (spark >= 0) {
           code = spark;
-          paint(look, TINTS[sparks.tint[k]]);
+          paint(glyph, TINTS[sparks.tint[k]]);
           alpha = 1;
         }
       }
@@ -454,9 +474,9 @@ const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number)
       if (g > UNLIT) {
         alpha += (1 - alpha) * g;
         const m = Math.min(1, g * windTint.glyph);
-        for (let j = 0; j < RGB; j++) {
-          look[GLYPH_RGB + j] += (glow[j] - look[GLYPH_RGB + j]) * m;
-          look[TILE_RGB + j] += (glow[j] - look[TILE_RGB + j]) * g * windTint.tile;
+        for (let j = 0; j < glyph.length; j++) {
+          glyph[j] += (glow[j] - glyph[j]) * m;
+          tile[j] += (glow[j] - tile[j]) * g * windTint.tile;
         }
         const wx = vx[k];
         const wy = vy[k];
@@ -465,14 +485,14 @@ const shadeRow = (pass: Pass, r: number, offTurn: boolean, changesSoFar: number)
         }
       }
     }
-    colours[o] = look[GLYPH_RGB];
-    colours[o + 1] = look[GLYPH_RGB + 1];
-    colours[o + 2] = look[GLYPH_RGB + 2];
+    colours[o] = glyph[0];
+    colours[o + 1] = glyph[1];
+    colours[o + 2] = glyph[2];
     colours[o + ALPHA] = code < 0 ? 0 : rounded(alpha * BYTE_MAX);
-    tiles[o] = look[TILE_RGB];
-    tiles[o + 1] = look[TILE_RGB + 1];
-    tiles[o + 2] = look[TILE_RGB + 2];
-    tiles[o + ALPHA] = rounded(look[TILE_ALPHA] * BYTE_MAX);
+    tiles[o] = tile[0];
+    tiles[o + 1] = tile[1];
+    tiles[o + 2] = tile[2];
+    tiles[o + ALPHA] = rounded(look.tileAlpha * BYTE_MAX);
     if (code !== shown[k]) {
       shown[k] = code;
       changed[changes++] = k;
@@ -503,6 +523,7 @@ export const shadeFrame = (
     frame,
     air,
     cellAt: cells.at(t, theme),
+    indexes: stillIndexes(cells, grid),
     t,
     glow: dark ? frame.night.glow : GLOW[theme],
     windTint: WIND_TINT[theme],

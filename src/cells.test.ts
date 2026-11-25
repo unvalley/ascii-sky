@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import {
   bigClouds,
   type CloudLayer,
+  createLook,
   drift,
   GLYPHS,
   hash,
@@ -13,6 +14,8 @@ import {
   range,
   reachOf,
   SKY_RAMP,
+  type SkyCells,
+  type SkyTheme,
   SUNSET_STOPS,
   skyCells,
   span,
@@ -53,38 +56,44 @@ const sky = (near: CloudLayer, far = layer(0)) => {
   });
 };
 
+const CELL_WIDTH = 8;
+const CELL_HEIGHT = 12;
+const shadeAt = (cells: SkyCells, seconds: number, theme: SkyTheme, x: number, y: number) => {
+  const look = createLook();
+  const index = cells.indexAt(x + CELL_WIDTH / 2, y + CELL_HEIGHT / 2);
+  const code = cells.at(seconds, theme)(x, y, CELL_WIDTH, CELL_HEIGHT, look, index);
+  return { code, look };
+};
+
 describe("cells", () => {
   test("open sky where there is no cloud, as blue as the painting", () => {
-    const out = [0, 0, 0, 0, 0, 0, 0, 0];
-    assert.equal(sky(layer(0)).at(3, "light")(30, 20, 8, 12, out), OPEN_SKY);
-    assert.deepEqual(out.slice(0, 3), [180, 180, 180]);
-    assert.equal(out[3], 4 / (SKY_RAMP.length - 1));
+    const { code, look } = shadeAt(sky(layer(0)), 3, "light", 30, 20);
+    assert.equal(code, OPEN_SKY);
+    assert.deepEqual([...look.glyph], [180, 180, 180]);
+    assert.equal(look.density, 4 / (SKY_RAMP.length - 1));
   });
 
   test("inside a cloud, a shading glyph of the theme on a tile", () => {
-    const out = [0, 0, 0, 0, 0, 0, 0, 0];
-    const g = sky(layer(255, 0)).at(0, "light")(40, 40, 8, 12, out);
+    const { code: g, look } = shadeAt(sky(layer(255, 0)), 0, "light", 40, 40);
     assert.ok(g === -1 || THEMES.light.inside.includes(g), GLYPHS[g]);
-    assert.ok(out[7] > 0.9, "the tile shows");
+    assert.ok(look.tileAlpha > 0.9, "the tile shows");
   });
 });
 
 describe("night", () => {
   test("the dark page's sky has no clouds: open sky everywhere", () => {
     const cells = sky(layer(255, 0), layer(255, 0));
-    const out = [0, 0, 0, 0, 0, 0, 0, 0];
-    assert.equal(cells.at(0, "dark")(40, 40, 8, 12, out), OPEN_SKY);
-    assert.notEqual(cells.at(0, "light")(40, 40, 8, 12, out), OPEN_SKY);
+    assert.equal(shadeAt(cells, 0, "dark", 40, 40).code, OPEN_SKY);
+    assert.notEqual(shadeAt(cells, 0, "light", 40, 40).code, OPEN_SKY);
   });
 });
 
 describe("sunset", () => {
   test("a sunset has only the near layer's clouds", () => {
-    const out = [0, 0, 0, 0, 0, 0, 0, 0];
     const farOnly = sky(layer(0), layer(255, 0));
-    assert.equal(farOnly.at(0, "sunset")(40, 40, 8, 12, out), OPEN_SKY);
-    assert.notEqual(farOnly.at(0, "light")(40, 40, 8, 12, out), OPEN_SKY);
-    assert.notEqual(sky(layer(255, 0)).at(0, "sunset")(40, 40, 8, 12, out), OPEN_SKY);
+    assert.equal(shadeAt(farOnly, 0, "sunset", 40, 40).code, OPEN_SKY);
+    assert.notEqual(shadeAt(farOnly, 0, "light", 40, 40).code, OPEN_SKY);
+    assert.notEqual(shadeAt(sky(layer(255, 0)), 0, "sunset", 40, 40).code, OPEN_SKY);
   });
 });
 

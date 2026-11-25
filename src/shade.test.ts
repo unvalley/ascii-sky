@@ -29,16 +29,18 @@ const fakeCells = (density: number, cloudFrom = Number.POSITIVE_INFINITY) => {
   const cells: SkyCells = {
     at:
       () =>
-      (x0, _y0, _cw, _ch, out, _shown, pushX = 0, pushY = 0) => {
+      (left, _top, _width, _height, look, _index, _shown, pushX = 0, pushY = 0) => {
         seen.cells += 1;
         if (pushX || pushY) {
           seen.push = [pushX, pushY];
         }
-        [100, 150, 200, density, 220, 220, 220, 0.3].forEach((v, k) => {
-          out[k] = v;
-        });
-        return x0 >= cloudFrom ? CLOUD : OPEN_SKY;
+        look.glyph.set([100, 150, 200]);
+        look.tile.set([220, 220, 220]);
+        look.density = density;
+        look.tileAlpha = 0.3;
+        return left >= cloudFrom ? CLOUD : OPEN_SKY;
       },
+    indexAt: () => 0,
   };
   return { cells, seen };
 };

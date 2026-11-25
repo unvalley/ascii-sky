@@ -374,10 +374,6 @@ const NOISE_SHIFT_Y = 1;
 const NOISE_SHADE = 2;
 const NOISE_FRAY = 3;
 const NOISE_SEED = 7;
-const SHAPE_SHIFT_X = 0;
-const SHAPE_SHIFT_Y = 1;
-const SHAPE_FRAY = 2;
-const SHAPE_SHADE = 3;
 const MULBERRY32 = {
   step: 0x6d_2b_79_f5,
   firstShift: 15,
@@ -528,24 +524,39 @@ export type StillSky = {
   rgb: Record<SkyTheme, ArrayLike<number>>;
 };
 
-export const GLYPH_RGB = 0;
-export const DENSITY = 3;
-export const TILE_RGB = 4;
-export const TILE_ALPHA = 7;
-export const LOOK_SLOTS = 8;
+export type Look = {
+  readonly glyph: Float64Array;
+  readonly tile: Float64Array;
+  density: number;
+  tileAlpha: number;
+};
+
+export const createLook = (): Look => ({
+  glyph: new Float64Array(RGB),
+  tile: new Float64Array(RGB),
+  density: 0,
+  tileAlpha: 0,
+});
 
 export type CellAt = (
   left: number,
   top: number,
   width: number,
   height: number,
-  look: number[],
+  look: Look,
+  index: number,
   shown?: number,
   pushX?: number,
   pushY?: number,
 ) => number;
 
-export type SkyCells = Readonly<{ at: (seconds: number, theme: SkyTheme) => CellAt }>;
+export type SkyCells = Readonly<{
+  at: (seconds: number, theme: SkyTheme) => CellAt;
+  indexAt: (x: number, y: number) => number;
+}>;
+
+type Samples = Readonly<{ shade: Float32Array; cover: Float32Array }>;
+type Shape = { shiftX: number; shiftY: number; fray: number; shade: number };
 
 type Clouds = Readonly<{
   noise: Float32Array;
@@ -601,12 +612,25 @@ const COVER_OF = Float32Array.from({ length: BYTE_MAX + 1 }, (_, v) =>
 );
 
 const wantedInk = new Float32Array(REGION_COUNT);
-const tileColour = [0, 0, 0];
-const nearSample = new Float32Array(2);
-const farSample = new Float32Array(2);
+const tileColour = new Float64Array(RGB);
+const COLUMN_SPOTS = Object.values(REGION_COLUMNS);
+const ROW_SPOTS = Object.values(REGION_ROWS);
+const spotLeft = new Int32Array(COLUMN_SPOTS.length);
+const spotRight = new Int32Array(COLUMN_SPOTS.length);
+const spotAcross = new Float64Array(COLUMN_SPOTS.length);
+const spotTop = new Int32Array(ROW_SPOTS.length);
+const spotDown = new Float64Array(ROW_SPOTS.length);
+const nearSamples: Samples = {
+  shade: new Float32Array(REGION_COUNT),
+  cover: new Float32Array(REGION_COUNT),
+};
+const farSamples: Samples = {
+  shade: new Float32Array(REGION_COUNT),
+  cover: new Float32Array(REGION_COUNT),
+};
 const grain = new Float32Array(NOISE_CHANNELS);
-const nearShape = new Float32Array(NOISE_CHANNELS);
-const farShape = new Float32Array(NOISE_CHANNELS);
+const nearShape: Shape = { shiftX: 0, shiftY: 0, fray: 0, shade: 0 };
+const farShape: Shape = { shiftX: 0, shiftY: 0, fray: 0, shade: 0 };
 
 const stillIndex = (still: StillSky, x: number, y: number) => {
   const c = wrap(Math.floor(x / still.cellWidth), still.columns);
@@ -614,34 +638,57 @@ const stillIndex = (still: StillSky, x: number, y: number) => {
   return r * still.columns + c;
 };
 
-const sample = (layer: CloudLayer, x: number, y: number, out: Float32Array) => {
-  const { pixels, width, height } = layer;
-  const fx = wrap(x / LAYER_SCALE, width) - CENTRE;
-  const fy = Math.min(height - BILINEAR_MARGIN, Math.max(0, y / LAYER_SCALE - CENTRE));
-  const x0 = Math.floor(fx);
-  const y0 = Math.floor(fy);
-  const u = fx - x0;
-  const v = fy - y0;
-  const left = x0 < 0 ? x0 + width : x0;
-  const right = left + 1 === width ? 0 : left + 1;
-  const topLeft = (y0 * width + left) * RGBA;
-  const topRight = (y0 * width + right) * RGBA;
-  const bottomLeft = topLeft + width * RGBA;
-  const bottomRight = topRight + width * RGBA;
-  const wTopLeft = (1 - u) * (1 - v);
-  const wTopRight = u * (1 - v);
-  const wBottomLeft = (1 - u) * v;
-  const wBottomRight = u * v;
-  out[CLOUD_SHADE] =
-    pixels[topLeft + CLOUD_SHADE] * wTopLeft +
-    pixels[topRight + CLOUD_SHADE] * wTopRight +
-    pixels[bottomLeft + CLOUD_SHADE] * wBottomLeft +
-    pixels[bottomRight + CLOUD_SHADE] * wBottomRight;
-  out[CLOUD_COVER] =
-    pixels[topLeft + CLOUD_COVER] * wTopLeft +
-    pixels[topRight + CLOUD_COVER] * wTopRight +
-    pixels[bottomLeft + CLOUD_COVER] * wBottomLeft +
-    pixels[bottomRight + CLOUD_COVER] * wBottomRight;
+const sampleRegions = (
+  layer: CloudLayer,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+  windShift: number,
+  shape: Shape,
+  out: Samples,
+) => {
+  const { pixels, width: layerWidth, height: layerHeight } = layer;
+  for (let c = 0; c < COLUMN_SPOTS.length; c++) {
+    const x = left + COLUMN_SPOTS[c] * width - windShift + shape.shiftX;
+    const fx = wrap(x / LAYER_SCALE, layerWidth) - CENTRE;
+    const x0 = Math.floor(fx);
+    const from = x0 < 0 ? x0 + layerWidth : x0;
+    spotLeft[c] = from;
+    spotRight[c] = from + 1 === layerWidth ? 0 : from + 1;
+    spotAcross[c] = fx - x0;
+  }
+  for (let r = 0; r < ROW_SPOTS.length; r++) {
+    const y = top + ROW_SPOTS[r] * height + shape.shiftY;
+    const fy = Math.min(layerHeight - BILINEAR_MARGIN, Math.max(0, y / LAYER_SCALE - CENTRE));
+    const y0 = Math.floor(fy);
+    spotTop[r] = y0 * layerWidth;
+    spotDown[r] = fy - y0;
+  }
+  for (let k = 0; k < REGION_COUNT; k++) {
+    const c = k % COLUMN_SPOTS.length;
+    const r = (k - c) / COLUMN_SPOTS.length;
+    const u = spotAcross[c];
+    const v = spotDown[r];
+    const topLeft = (spotTop[r] + spotLeft[c]) * RGBA;
+    const topRight = (spotTop[r] + spotRight[c]) * RGBA;
+    const bottomLeft = topLeft + layerWidth * RGBA;
+    const bottomRight = topRight + layerWidth * RGBA;
+    const wTopLeft = (1 - u) * (1 - v);
+    const wTopRight = u * (1 - v);
+    const wBottomLeft = (1 - u) * v;
+    const wBottomRight = u * v;
+    out.shade[k] =
+      pixels[topLeft + CLOUD_SHADE] * wTopLeft +
+      pixels[topRight + CLOUD_SHADE] * wTopRight +
+      pixels[bottomLeft + CLOUD_SHADE] * wBottomLeft +
+      pixels[bottomRight + CLOUD_SHADE] * wBottomRight;
+    out.cover[k] =
+      pixels[topLeft + CLOUD_COVER] * wTopLeft +
+      pixels[topRight + CLOUD_COVER] * wTopRight +
+      pixels[bottomLeft + CLOUD_COVER] * wBottomLeft +
+      pixels[bottomRight + CLOUD_COVER] * wBottomRight;
+  }
 };
 
 const shadeGlyph = (glyphs: readonly number[], shade: number, jitter: number, shown: number) => {
@@ -679,11 +726,11 @@ const shapeGlyph = (shapes: Float32Array, shown: number) => {
   return shownDistance <= bestDistance + KEEP_SHAPE ? shown : best;
 };
 
-const paletteAt = (colours: readonly Rgb[], shade: number, out: number[]) => {
+const paletteAt = (colours: readonly Rgb[], shade: number, out: Float64Array) => {
   const p = Math.min(colours.length - LAST_STOP_MARGIN, Math.max(0, shade) * (colours.length - 1));
   const j = Math.floor(p);
   const q = p - j;
-  for (let k = 0; k < RGB; k++) {
+  for (let k = 0; k < out.length; k++) {
     out[k] = colours[j][k] + (colours[j + 1][k] - colours[j][k]) * q;
   }
 };
@@ -715,7 +762,7 @@ const shapeAt = (
   y: number,
   scale: number,
   seed: number,
-  out: Float32Array,
+  out: Shape,
 ) => {
   const s = NOISE_CELL / scale;
   noiseAt(
@@ -734,11 +781,12 @@ const shapeAt = (
     ((y + CURL.driftY * time) * s) / CURL.down + CURL_OFFSET.y + seed,
     grain,
   );
-  out[SHAPE_SHIFT_X] = (shiftX + CURL.x * grain[NOISE_SHIFT_X]) * scale;
-  out[SHAPE_SHIFT_Y] = (shiftY + CURL.y * grain[NOISE_SHIFT_Y]) * scale;
-  out[SHAPE_FRAY] =
-    Math.max(-1, Math.min(1, FRAY_MIX.billow * fray + FRAY_MIX.curl * grain[NOISE_SHADE])) * FRAY;
-  out[SHAPE_SHADE] = shade * SHADE_SHIFT * BYTE_MAX;
+  out.shiftX = Math.fround((shiftX + CURL.x * grain[NOISE_SHIFT_X]) * scale);
+  out.shiftY = Math.fround((shiftY + CURL.y * grain[NOISE_SHIFT_Y]) * scale);
+  out.fray = Math.fround(
+    Math.max(-1, Math.min(1, FRAY_MIX.billow * fray + FRAY_MIX.curl * grain[NOISE_SHADE])) * FRAY,
+  );
+  out.shade = Math.fround(shade * SHADE_SHIFT * BYTE_MAX);
 };
 
 const covered = (cover: number, fray: number) => {
@@ -772,9 +820,7 @@ const nearHere = (now: Moment, x: number, y: number) => {
     return false;
   }
   shapeAt(clouds.noise, now.seconds, x, y, 1, 0, nearShape);
-  return (
-    clouds.nearAround(x + nearShape[SHAPE_SHIFT_X], y + nearShape[SHAPE_SHIFT_Y]) >= NEAR_CLOUD
-  );
+  return clouds.nearAround(x + nearShape.shiftX, y + nearShape.shiftY) >= NEAR_CLOUD;
 };
 
 const farHere = (now: Moment, x: number, y: number) => {
@@ -783,7 +829,7 @@ const farHere = (now: Moment, x: number, y: number) => {
     return false;
   }
   shapeAt(clouds.noise, now.seconds, x, y, FAR_SCALE, FAR_SEED, farShape);
-  return clouds.farAround(x + farShape[SHAPE_SHIFT_X], y + farShape[SHAPE_SHIFT_Y]) >= NEAR_CLOUD;
+  return clouds.farAround(x + farShape.shiftX, y + farShape.shiftY) >= NEAR_CLOUD;
 };
 
 const cellOf = (
@@ -792,30 +838,32 @@ const cellOf = (
   top: number,
   width: number,
   height: number,
-  look: number[],
+  look: Look,
+  index: number,
   shown: number,
   pushX: number,
   pushY: number,
 ): number => {
-  const { now, still, density } = sky;
+  const { now, density } = sky;
   const { style, map, clouds, nearShift, farShift } = now;
   const nearer = clouds ? clouds.near : sky.near;
   const cx = left + width / 2;
   const cy = top + height / 2;
-  const i = stillIndex(still, cx, cy);
   const pushedLeft = left - pushX;
   const pushedTop = top - pushY;
   const lx = cx - pushX;
   const ly = cy - pushY;
   const hasNear = nearHere(now, lx - nearShift, ly);
   const hasFar = farHere(now, lx - farShift, ly);
-  for (let k = 0; k < RGB; k++) {
-    look[GLYPH_RGB + k] = map[i * RGBA + k];
-    look[TILE_RGB + k] = map[i * RGBA + k];
+  const { glyph, tile } = look;
+  const pixel = index * RGBA;
+  for (let k = 0; k < glyph.length; k++) {
+    glyph[k] = map[pixel + k];
+    tile[k] = map[pixel + k];
   }
-  look[DENSITY] = density[i];
-  const wash = style.wash.thin + (style.wash.dense - style.wash.thin) * density[i];
-  look[TILE_ALPHA] = wash;
+  look.density = density[index];
+  const wash = style.wash.thin + (style.wash.dense - style.wash.thin) * density[index];
+  look.tileAlpha = wash;
   if (!(hasNear || hasFar)) {
     return OPEN_SKY;
   }
@@ -824,29 +872,17 @@ const cellOf = (
   let most = 0;
   let shaded = 0;
   let nearSum = 0;
+  if (hasNear) {
+    sampleRegions(nearer, pushedLeft, pushedTop, width, height, nearShift, nearShape, nearSamples);
+  }
+  if (hasFar) {
+    sampleRegions(sky.far, pushedLeft, pushedTop, width, height, farShift, farShape, farSamples);
+  }
   for (let k = 0; k < REGION_COUNT; k++) {
-    const x = pushedLeft + REGIONS[k].x * width;
-    const y = pushedTop + REGIONS[k].y * height;
-    if (hasNear) {
-      sample(
-        nearer,
-        x - nearShift + nearShape[SHAPE_SHIFT_X],
-        y + nearShape[SHAPE_SHIFT_Y],
-        nearSample,
-      );
-    }
-    if (hasFar) {
-      sample(
-        sky.far,
-        x - farShift + farShape[SHAPE_SHIFT_X],
-        y + farShape[SHAPE_SHIFT_Y],
-        farSample,
-      );
-    }
-    const nearCover = hasNear ? covered(nearSample[CLOUD_COVER], nearShape[SHAPE_FRAY]) : 0;
-    const nearShade = hasNear ? toByte(nearSample[CLOUD_SHADE] + nearShape[SHAPE_SHADE]) : 0;
-    const farCover = hasFar ? covered(farSample[CLOUD_COVER], farShape[SHAPE_FRAY]) : 0;
-    const farShade = hasFar ? toByte(farSample[CLOUD_SHADE] + farShape[SHAPE_SHADE]) : 0;
+    const nearCover = hasNear ? covered(nearSamples.cover[k], nearShape.fray) : 0;
+    const nearShade = hasNear ? toByte(nearSamples.shade[k] + nearShape.shade) : 0;
+    const farCover = hasFar ? covered(farSamples.cover[k], farShape.fray) : 0;
+    const farShade = hasFar ? toByte(farSamples.shade[k] + farShape.shade) : 0;
     const cover = nearCover + farCover * (1 - nearCover);
     wantedInk[k] = cover * EDGE_INK;
     thinnest = Math.min(thinnest, cover);
@@ -871,13 +907,12 @@ const cellOf = (
       : TILE_FILL.edge * smoothstep(TILE_FILL.edgeFrom, TILE_FILL.full, coverage)) *
     (onNear ? 1 : TILE_FILL.far);
   const tileAlpha = fill + (1 - fill) * wash;
-  for (let k = 0; k < RGB; k++) {
-    look[TILE_RGB + k] =
-      (fill * tileColour[k] + (1 - fill) * wash * look[TILE_RGB + k]) / tileAlpha;
+  for (let k = 0; k < tile.length; k++) {
+    tile[k] = (fill * tileColour[k] + (1 - fill) * wash * tile[k]) / tileAlpha;
   }
-  look[TILE_ALPHA] = tileAlpha;
+  look.tileAlpha = tileAlpha;
   if (inside) {
-    paletteAt(style.glyph, shade, look);
+    paletteAt(style.glyph, shade, glyph);
     const jitter = (hash(u, v, onNear ? JITTER_SEED.near : JITTER_SEED.far) - CENTRE) * JITTER;
     return shadeGlyph(style.inside, shade, jitter, shown);
   }
@@ -885,7 +920,7 @@ const cellOf = (
   if (best < 0) {
     return wantedInk[LAST_REGION] < EDGE_INK * BLANK_INK ? OPEN_SKY : BLANK;
   }
-  paletteAt(style.edge, shade, look);
+  paletteAt(style.edge, shade, glyph);
   return best;
 };
 
@@ -939,12 +974,22 @@ export const skyCells = ({
       farShift: 0,
     },
   };
-  const cellAt: CellAt = (left, top, width, height, look, shown = BLANK, pushX = 0, pushY = 0) =>
-    cellOf(sky, left, top, width, height, look, shown, pushX, pushY);
+  const cellAt: CellAt = (
+    left,
+    top,
+    width,
+    height,
+    look,
+    index,
+    shown = BLANK,
+    pushX = 0,
+    pushY = 0,
+  ) => cellOf(sky, left, top, width, height, look, index, shown, pushX, pushY);
   return {
     at: (seconds, theme) => {
       momentAt(sky, seconds, theme);
       return cellAt;
     },
+    indexAt: (x, y) => stillIndex(still, x, y),
   };
 };
